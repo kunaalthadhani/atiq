@@ -181,20 +181,6 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
   notes: contract.notes,
 });
 
-const toInvoiceRow = (invoice: Omit<Invoice, 'id' | 'createdAt' | 'contractId'>) => ({
-  invoice_number: invoice.invoiceNumber,
-  installment_number: invoice.installmentNumber,
-  due_date: invoice.dueDate.toISOString().split('T')[0],
-  amount: invoice.amount,
-  paid_amount: invoice.paidAmount,
-  remaining_amount: invoice.remainingAmount,
-  status: invoice.status,
-  admin_status: invoice.adminStatus,
-  payment_type: invoice.paymentType,
-  sent_date: invoice.sentDate?.toISOString().split('T')[0],
-  notes: invoice.notes,
-});
-
 const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => ({
   invoice_id: payment.invoiceId,
   amount: payment.amount,
@@ -234,7 +220,8 @@ class SupabaseService {
   }
 
   async getPropertyById(id: string): Promise<Property | null> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('properties')
       .select('*')
       .eq('id', id)
@@ -249,7 +236,8 @@ class SupabaseService {
   }
 
   async createProperty(property: Omit<Property, 'id' | 'createdAt'>): Promise<Property> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    const { data, error } = await supabase!
       .from('properties')
       .insert(toPropertyRow(property))
       .select()
@@ -277,7 +265,8 @@ class SupabaseService {
     if (updates.notes !== undefined) updateData.notes = updates.notes;
     if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
 
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('properties')
       .update(updateData)
       .eq('id', id)
@@ -293,7 +282,8 @@ class SupabaseService {
   }
 
   async deleteProperty(id: string): Promise<boolean> {
-    const { error } = await supabase
+    if (!this.checkSupabase()) return false;
+    const { error } = await supabase!
       .from('properties')
       .delete()
       .eq('id', id);
@@ -310,7 +300,8 @@ class SupabaseService {
   // UNITS
   // ============================================
   async getUnits(propertyId?: string): Promise<Unit[]> {
-    let query = supabase
+    if (!this.checkSupabase()) return [];
+    let query = supabase!
       .from('units')
       .select('*')
       .order('created_at', { ascending: false });
@@ -330,7 +321,8 @@ class SupabaseService {
   }
 
   async getUnitById(id: string): Promise<Unit | null> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('units')
       .select('*')
       .eq('id', id)
@@ -345,7 +337,8 @@ class SupabaseService {
   }
 
   async createUnit(unit: Omit<Unit, 'id' | 'createdAt'>): Promise<Unit> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    const { data, error } = await supabase!
       .from('units')
       .insert(toUnitRow(unit))
       .select()
@@ -373,7 +366,8 @@ class SupabaseService {
     if (updates.images !== undefined) updateData.images = updates.images;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
 
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('units')
       .update(updateData)
       .eq('id', id)
@@ -389,7 +383,8 @@ class SupabaseService {
   }
 
   async deleteUnit(id: string): Promise<boolean> {
-    const { error } = await supabase
+    if (!this.checkSupabase()) return false;
+    const { error } = await supabase!
       .from('units')
       .delete()
       .eq('id', id);
@@ -406,7 +401,8 @@ class SupabaseService {
   // TENANTS
   // ============================================
   async getTenants(): Promise<Tenant[]> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return [];
+    const { data, error } = await supabase!
       .from('tenants')
       .select('*')
       .order('created_at', { ascending: false });
@@ -420,7 +416,8 @@ class SupabaseService {
   }
 
   async getTenantById(id: string): Promise<Tenant | null> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('tenants')
       .select('*')
       .eq('id', id)
@@ -435,7 +432,8 @@ class SupabaseService {
   }
 
   async createTenant(tenant: Omit<Tenant, 'id' | 'createdAt'>): Promise<Tenant> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    const { data, error } = await supabase!
       .from('tenants')
       .insert(toTenantRow(tenant))
       .select()
@@ -467,7 +465,8 @@ class SupabaseService {
     if (updates.notificationPreference !== undefined) updateData.notification_preference = updates.notificationPreference;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
 
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
       .from('tenants')
       .update(updateData)
       .eq('id', id)
@@ -483,8 +482,9 @@ class SupabaseService {
   }
 
   async deleteTenant(id: string): Promise<boolean> {
+    if (!this.checkSupabase()) return false;
     // Check if tenant has contracts
-    const { data: contracts } = await supabase
+    const { data: contracts } = await supabase!
       .from('contracts')
       .select('id')
       .eq('tenant_id', id)
@@ -494,7 +494,7 @@ class SupabaseService {
       return false; // Cannot delete tenant with contracts
     }
     
-    const { error } = await supabase
+    const { error } = await supabase!
       .from('tenants')
       .delete()
       .eq('id', id);
@@ -511,7 +511,8 @@ class SupabaseService {
   // CONTRACTS
   // ============================================
   async getContracts(): Promise<ContractWithDetails[]> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return [];
+    const { data, error } = await supabase!
       .from('contracts')
       .select(`
         *,
@@ -543,9 +544,10 @@ class SupabaseService {
   }
 
   async createContract(contract: Omit<Contract, 'id' | 'createdAt'>): Promise<{ success: boolean; message?: string; contract?: Contract }> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
     // Validate overlapping contracts for active status
     if (contract.status === 'active') {
-      const { data: overlapping } = await supabase
+      const { data: overlapping } = await supabase!
         .from('contracts')
         .select('id')
         .eq('unit_id', contract.unitId)
@@ -557,7 +559,7 @@ class SupabaseService {
       }
 
       // Check if tenant has active contract
-      const { data: tenantContracts } = await supabase
+      const { data: tenantContracts } = await supabase!
         .from('contracts')
         .select('id')
         .eq('tenant_id', contract.tenantId)
@@ -569,7 +571,7 @@ class SupabaseService {
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('contracts')
       .insert(toContractRow(contract))
       .select()
@@ -591,8 +593,9 @@ class SupabaseService {
   }
 
   async terminateContract(id: string): Promise<boolean> {
+    if (!this.checkSupabase()) return false;
     // Update contract status to terminated
-    const { error: contractError } = await supabase
+    const { error: contractError } = await supabase!
       .from('contracts')
       .update({ status: 'terminated' })
       .eq('id', id);
@@ -603,7 +606,7 @@ class SupabaseService {
     }
 
     // Get contract to find unit
-    const { data: contractData } = await supabase
+    const { data: contractData } = await supabase!
       .from('contracts')
       .select('unit_id')
       .eq('id', id)
@@ -611,13 +614,13 @@ class SupabaseService {
 
     if (contractData) {
       // Mark unit as vacant
-      await supabase
+      await supabase!
         .from('units')
         .update({ is_occupied: false })
         .eq('id', contractData.unit_id);
 
       // Cancel unpaid invoices
-      await supabase
+      await supabase!
         .from('invoices')
         .update({ status: 'cancelled' })
         .eq('contract_id', id)
@@ -630,7 +633,7 @@ class SupabaseService {
   private async generateInvoicesForContract(contract: Contract) {
     // This will be handled by database triggers or can be done here
     // For now, we'll create invoices manually
-    const { addMonths, format } = await import('date-fns');
+    const { addMonths } = await import('date-fns');
     
     let intervalMonths = 1;
     if (contract.paymentFrequency === 'quarterly') intervalMonths = 3;
@@ -661,7 +664,8 @@ class SupabaseService {
     }
 
     if (invoices.length > 0) {
-      const { error } = await supabase
+      if (!this.checkSupabase()) return;
+      const { error } = await supabase!
         .from('invoices')
         .insert(invoices);
       
@@ -675,7 +679,8 @@ class SupabaseService {
   // INVOICES
   // ============================================
   async getInvoices(): Promise<InvoiceWithDetails[]> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return [];
+    const { data, error } = await supabase!
       .from('invoices')
       .select(`
         *,
@@ -735,7 +740,8 @@ class SupabaseService {
   }
 
   async getInvoicesByDateRange(startDate: Date, endDate: Date): Promise<InvoiceWithDetails[]> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return [];
+    const { data, error } = await supabase!
       .from('invoices')
       .select(`
         *,
@@ -797,6 +803,7 @@ class SupabaseService {
   }
 
   async updateInvoice(id: string, updates: Partial<Omit<Invoice, 'id' | 'createdAt' | 'contractId' | 'invoiceNumber' | 'installmentNumber' | 'dueDate' | 'amount'>>): Promise<Invoice | null> {
+    if (!this.checkSupabase()) return null;
     const updateData: any = {};
     if (updates.paidAmount !== undefined) updateData.paid_amount = updates.paidAmount;
     if (updates.remainingAmount !== undefined) updateData.remaining_amount = updates.remainingAmount;
@@ -806,7 +813,7 @@ class SupabaseService {
     if (updates.sentDate !== undefined) updateData.sent_date = updates.sentDate?.toISOString().split('T')[0];
     if (updates.notes !== undefined) updateData.notes = updates.notes;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('invoices')
       .update(updateData)
       .eq('id', id)
@@ -825,7 +832,8 @@ class SupabaseService {
   // PAYMENTS
   // ============================================
   async getPayments(invoiceId?: string): Promise<Payment[]> {
-    let query = supabase
+    if (!this.checkSupabase()) return [];
+    let query = supabase!
       .from('payments')
       .select('*')
       .order('payment_date', { ascending: false });
@@ -845,7 +853,8 @@ class SupabaseService {
   }
 
   async createPayment(payment: Omit<Payment, 'id' | 'createdAt'>): Promise<Payment> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    const { data, error } = await supabase!
       .from('payments')
       .insert(toPaymentRow(payment))
       .select()
@@ -857,7 +866,7 @@ class SupabaseService {
     }
     
     // Update invoice amounts and status
-    const { data: invoiceData } = await supabase
+    const { data: invoiceData } = await supabase!
       .from('invoices')
       .select('paid_amount, remaining_amount, amount')
       .eq('id', payment.invoiceId)
@@ -874,7 +883,7 @@ class SupabaseService {
         newStatus = 'partial';
       }
 
-      await supabase
+      await supabase!
         .from('invoices')
         .update({
           paid_amount: newPaidAmount,
@@ -888,7 +897,8 @@ class SupabaseService {
   }
 
   async deletePayment(paymentId: string): Promise<boolean> {
-    const { error } = await supabase
+    if (!this.checkSupabase()) return false;
+    const { error } = await supabase!
       .from('payments')
       .delete()
       .eq('id', paymentId);
@@ -906,7 +916,8 @@ class SupabaseService {
   // REMINDERS
   // ============================================
   async getReminders(): Promise<Reminder[]> {
-    const { data, error } = await supabase
+    if (!this.checkSupabase()) return [];
+    const { data, error } = await supabase!
       .from('reminders')
       .select('*')
       .eq('is_dismissed', false)
@@ -930,7 +941,8 @@ class SupabaseService {
   }
 
   async dismissReminder(id: string): Promise<boolean> {
-    const { error } = await supabase
+    if (!this.checkSupabase()) return false;
+    const { error } = await supabase!
       .from('reminders')
       .update({ is_dismissed: true })
       .eq('id', id);

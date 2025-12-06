@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Building2, Home, Users, FileText, 
+  LayoutDashboard, Building2, Users, FileText, 
   Receipt, Wallet, Calendar, X, Bell, LogOut 
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';

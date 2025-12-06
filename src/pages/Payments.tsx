@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Wallet, DollarSign, X, CheckCircle, Trash2, Share2, MessageSquare, Mail, Clock, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, Search, Wallet, X, Trash2, Share2, MessageSquare, Mail, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Payment, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, generateWhatsAppLink, generateEmailLink, cn } from '@/lib/utils';

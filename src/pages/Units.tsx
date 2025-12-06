@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Home, Building2, Image as ImageIcon, X, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Unit, Property } from '@/types';
-import { formatCurrency, cn, getStatusColor } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 
 export default function Units() {
   const [units, setUnits] = useState<Unit[]>([]);

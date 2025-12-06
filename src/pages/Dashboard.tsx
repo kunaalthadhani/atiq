@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2, Home, Users, FileText, TrendingUp,
-  AlertCircle, Wallet, Calendar, Plus, Receipt, BarChart as BarChartIcon, PieChart as PieChartIcon, Filter
+  AlertCircle, Wallet, Calendar, Receipt, BarChart as BarChartIcon, PieChart as PieChartIcon, Filter
 } from 'lucide-react';
-import { subMonths, subYears, startOfMonth, endOfMonth, format, isWithinInterval } from 'date-fns';
+import { subMonths, startOfMonth, endOfMonth, format, isWithinInterval } from 'date-fns';
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer

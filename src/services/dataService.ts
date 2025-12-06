@@ -189,7 +189,7 @@ class LocalStorageService {
     const reminders = this.loadFromStorage<Reminder>('reminders');
     const now = new Date();
     return reminders.filter(r => {
-      if (r.dismissed) return false;
+      if (r.isDismissed) return false;
       if (!r.reminderDate) return false;
       const reminderDate = new Date(r.reminderDate);
       return reminderDate <= now;

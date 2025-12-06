@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Eye, Copy, CheckCircle, Clock, Ban } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
-import { differenceInMonths, differenceInDays } from 'date-fns';
+import { differenceInMonths } from 'date-fns';
 
 export default function Contracts() {
   const [contracts, setContracts] = useState<ContractWithDetails[]>([]);
@@ -243,7 +243,7 @@ export default function Contracts() {
           const activeContracts = contracts.filter(c => c.status === 'active').length;
           const expiredContracts = contracts.filter(c => c.status === 'expired').length;
           const draftContracts = contracts.filter(c => c.status === 'draft').length;
-          const terminatedContracts = contracts.filter(c => c.status === 'terminated' || c.status === 'suspended').length;
+          const terminatedContracts = contracts.filter(c => c.status === 'terminated').length;
           
           return [
             { label: 'Active', count: activeContracts, color: 'bg-success-100 text-success-700', icon: CheckCircle },

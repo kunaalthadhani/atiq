@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Receipt, Mail, MessageSquare, AlertCircle, CheckCircle, Clock, Edit2, Share2, X } from 'lucide-react';
+import { Search, Receipt, Mail, MessageSquare, AlertCircle, CheckCircle, Clock, Share2, X } from 'lucide-react';
 import { dataService } from '@/services/dataService';
-import { InvoiceWithDetails, Payment } from '@/types';
+import { InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn, generateWhatsAppLink, generateEmailLink } from '@/lib/utils';
 
 export default function Invoices() {
@@ -51,7 +51,19 @@ export default function Invoices() {
   });
 
   const filteredInvoices = sortedInvoices.filter(invoice => {
-    if (!searchQuery) return true;
+    // Status filter
+    let matchesStatus = true;
+    if (filterStatus === 'issued') {
+      matchesStatus = invoice.status === 'pending' || invoice.status === 'partial';
+    } else if (filterStatus === 'overdue') {
+      matchesStatus = invoice.status === 'overdue';
+    } else if (filterStatus === 'paid') {
+      matchesStatus = invoice.status === 'paid';
+    } else if (filterStatus === 'partial') {
+      matchesStatus = invoice.status === 'partial';
+    }
+    
+    if (!searchQuery) return matchesStatus;
     
     const query = searchQuery.toLowerCase();
     const tenantName = `${invoice.tenant.firstName} ${invoice.tenant.lastName}`.toLowerCase();
@@ -63,7 +75,7 @@ export default function Invoices() {
     const tenantWhatsApp = invoice.tenant.whatsappNumber?.toLowerCase() || '';
     const tenantNationalId = invoice.tenant.nationalId?.toLowerCase() || '';
     
-    return (
+    const matchesSearch = (
       invoiceNumber.includes(query) ||
       tenantName.includes(query) ||
       propertyName.includes(query) ||
@@ -73,21 +85,6 @@ export default function Invoices() {
       tenantWhatsApp.includes(query) ||
       tenantNationalId.includes(query)
     );
-
-    let matchesStatus = true;
-    if (filterStatus === 'issued') {
-      matchesStatus = invoice.status === 'pending' || invoice.status === 'partial';
-    } else if (filterStatus === 'overdue') {
-      matchesStatus = invoice.status === 'overdue';
-    } else if (filterStatus === 'paid') {
-      matchesStatus = invoice.status === 'paid';
-    } else if (filterStatus === 'partial') {
-      matchesStatus = invoice.status === 'partial';
-    }
-
-    if (filterStatus === 'all') {
-      matchesStatus = true;
-    }
 
     return matchesSearch && matchesStatus;
   });

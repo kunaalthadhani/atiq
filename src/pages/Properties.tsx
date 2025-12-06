@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Building2, MapPin, Home, X, Edit2, Trash2, ArrowRight, Upload, Trash, ChevronDown } from 'lucide-react';
+import { Plus, Search, Building2, MapPin, Home, X, Edit2, Trash2, Upload, ChevronDown } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Property, Unit } from '@/types';
 
@@ -916,7 +916,7 @@ export default function Properties() {
                       <div key={idx} className="relative inline-block">
                         <img
                           src={img}
-                          alt={`Unit ${editingUnit.unitNumber}`}
+                          alt={editingUnit ? `Unit ${editingUnit.unitNumber}` : 'Unit image'}
                           className="w-20 h-20 object-cover rounded-lg border border-gray-300"
                         />
                         <button
