@@ -207,10 +207,6 @@ export default function Properties() {
     setUnitImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleViewDetails = (property: Property) => {
-    setViewingProperty(property);
-  };
-
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
       {/* Header */}

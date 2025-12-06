@@ -699,7 +699,7 @@ class SupabaseService {
     
     // Get payments for each invoice
     const invoiceIds = data.map((inv: any) => inv.id);
-    const { data: paymentsData } = await supabase
+    const { data: paymentsData } = await supabase!
       .from('payments')
       .select('*')
       .in('invoice_id', invoiceIds);
@@ -762,7 +762,7 @@ class SupabaseService {
     
     // Get payments for each invoice
     const invoiceIds = data.map((inv: any) => inv.id);
-    const { data: paymentsData } = await supabase
+    const { data: paymentsData } = await supabase!
       .from('payments')
       .select('*')
       .in('invoice_id', invoiceIds);

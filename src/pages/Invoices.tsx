@@ -149,10 +149,6 @@ Thank you!`;
     setShareDropdownOpen(null);
   };
 
-  const handleEditInvoice = (invoice: InvoiceWithDetails) => {
-    setEditingInvoice(invoice);
-  };
-
   const handleSaveInvoice = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingInvoice) return;

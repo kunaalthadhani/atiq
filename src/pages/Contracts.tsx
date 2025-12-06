@@ -216,10 +216,6 @@ export default function Contracts() {
       )
     : [];
 
-  const getAvailableUnits = () => {
-    return units.filter(u => !u.isOccupied);
-  };
-
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
       {/* Header */}
