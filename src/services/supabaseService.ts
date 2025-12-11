@@ -48,7 +48,9 @@ const mapTenant = (row: any): Tenant => ({
   lastName: row.last_name,
   email: row.email,
   phone: row.phone,
+  secondaryPhone: row.secondary_phone,
   whatsappNumber: row.whatsapp_number,
+  secondaryWhatsappNumber: row.secondary_whatsapp_number,
   nationalId: row.national_id,
   emergencyContact: row.emergency_contact,
   emergencyPhone: row.emergency_phone,
@@ -152,7 +154,9 @@ const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'>) => ({
   last_name: tenant.lastName,
   email: tenant.email,
   phone: tenant.phone,
+  secondary_phone: tenant.secondaryPhone,
   whatsapp_number: tenant.whatsappNumber,
+  secondary_whatsapp_number: tenant.secondaryWhatsappNumber,
   national_id: tenant.nationalId,
   emergency_contact: tenant.emergencyContact,
   emergency_phone: tenant.emergencyPhone,
@@ -400,12 +404,17 @@ class SupabaseService {
   // ============================================
   // TENANTS
   // ============================================
-  async getTenants(): Promise<Tenant[]> {
+  async getTenants(range: { from: number; to: number } = { from: 0, to: 199 }): Promise<Tenant[]> {
     if (!this.checkSupabase()) return [];
     const { data, error } = await supabase!
       .from('tenants')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select(`
+        id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+        national_id, emergency_contact, emergency_phone, created_at,
+        id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes
+      `)
+      .order('created_at', { ascending: false })
+      .range(range.from, range.to);
     
     if (error) {
       console.error('Error fetching tenants:', error);
@@ -453,7 +462,9 @@ class SupabaseService {
     if (updates.lastName !== undefined) updateData.last_name = updates.lastName;
     if (updates.email !== undefined) updateData.email = updates.email;
     if (updates.phone !== undefined) updateData.phone = updates.phone;
+    if (updates.secondaryPhone !== undefined) updateData.secondary_phone = updates.secondaryPhone;
     if (updates.whatsappNumber !== undefined) updateData.whatsapp_number = updates.whatsappNumber;
+    if (updates.secondaryWhatsappNumber !== undefined) updateData.secondary_whatsapp_number = updates.secondaryWhatsappNumber;
     if (updates.nationalId !== undefined) updateData.national_id = updates.nationalId;
     if (updates.emergencyContact !== undefined) updateData.emergency_contact = updates.emergencyContact;
     if (updates.emergencyPhone !== undefined) updateData.emergency_phone = updates.emergencyPhone;
@@ -510,16 +521,25 @@ class SupabaseService {
   // ============================================
   // CONTRACTS
   // ============================================
-  async getContracts(): Promise<ContractWithDetails[]> {
+  async getContracts(range: { from: number; to: number } = { from: 0, to: 199 }): Promise<ContractWithDetails[]> {
     if (!this.checkSupabase()) return [];
     const { data, error } = await supabase!
       .from('contracts')
       .select(`
         *,
-        tenant:tenants(*),
-        unit:units(*, property:properties(*))
+        tenant:tenants(
+          id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+          payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date, billing_address
+        ),
+        unit:units(
+          id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+          property:properties(
+            id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
+          )
+        )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(range.from, range.to);
     
     if (error) {
       console.error('Error fetching contracts:', error);
@@ -678,7 +698,7 @@ class SupabaseService {
   // ============================================
   // INVOICES
   // ============================================
-  async getInvoices(): Promise<InvoiceWithDetails[]> {
+  async getInvoices(range: { from: number; to: number } = { from: 0, to: 199 }): Promise<InvoiceWithDetails[]> {
     if (!this.checkSupabase()) return [];
     const { data, error } = await supabase!
       .from('invoices')
@@ -686,11 +706,20 @@ class SupabaseService {
         *,
         contract:contracts!inner(
           *,
-          tenant:tenants(*),
-          unit:units(*, property:properties(*))
+          tenant:tenants(
+            id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+            payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
+          ),
+          unit:units(
+            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+            property:properties(
+              id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
+            )
+          )
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(range.from, range.to);
     
     if (error) {
       console.error('Error fetching invoices:', error);
@@ -701,7 +730,7 @@ class SupabaseService {
     const invoiceIds = data.map((inv: any) => inv.id);
     const { data: paymentsData } = await supabase!
       .from('payments')
-      .select('*')
+      .select('id, invoice_id, amount, payment_date, payment_method, reference_number, notes, created_at')
       .in('invoice_id', invoiceIds);
     
     const paymentsMap = new Map<string, Payment[]>();
@@ -739,7 +768,7 @@ class SupabaseService {
       .filter((inv: InvoiceWithDetails | null) => inv !== null) as InvoiceWithDetails[];
   }
 
-  async getInvoicesByDateRange(startDate: Date, endDate: Date): Promise<InvoiceWithDetails[]> {
+  async getInvoicesByDateRange(startDate: Date, endDate: Date, range: { from: number; to: number } = { from: 0, to: 199 }): Promise<InvoiceWithDetails[]> {
     if (!this.checkSupabase()) return [];
     const { data, error } = await supabase!
       .from('invoices')
@@ -747,13 +776,22 @@ class SupabaseService {
         *,
         contract:contracts!inner(
           *,
-          tenant:tenants(*),
-          unit:units(*, property:properties(*))
+          tenant:tenants(
+            id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+            payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
+          ),
+          unit:units(
+            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+            property:properties(
+              id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
+            )
+          )
         )
       `)
       .gte('due_date', startDate.toISOString().split('T')[0])
       .lte('due_date', endDate.toISOString().split('T')[0])
-      .order('due_date', { ascending: true });
+      .order('due_date', { ascending: true })
+      .range(range.from, range.to);
     
     if (error) {
       console.error('Error fetching invoices by date range:', error);
@@ -764,7 +802,7 @@ class SupabaseService {
     const invoiceIds = data.map((inv: any) => inv.id);
     const { data: paymentsData } = await supabase!
       .from('payments')
-      .select('*')
+      .select('id, invoice_id, amount, payment_date, payment_method, reference_number, notes, created_at')
       .in('invoice_id', invoiceIds);
     
     const paymentsMap = new Map<string, Payment[]>();
@@ -831,12 +869,13 @@ class SupabaseService {
   // ============================================
   // PAYMENTS
   // ============================================
-  async getPayments(invoiceId?: string): Promise<Payment[]> {
+  async getPayments(invoiceId?: string, range: { from: number; to: number } = { from: 0, to: 199 }): Promise<Payment[]> {
     if (!this.checkSupabase()) return [];
     let query = supabase!
       .from('payments')
-      .select('*')
-      .order('payment_date', { ascending: false });
+      .select('id, invoice_id, amount, payment_date, payment_method, reference_number, notes, created_at')
+      .order('payment_date', { ascending: false })
+      .range(range.from, range.to);
     
     if (invoiceId) {
       query = query.eq('invoice_id', invoiceId);

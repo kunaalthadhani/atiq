@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar } from 'lucide-react';
+import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar, Eye } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Tenant } from '@/types';
 
@@ -11,6 +11,7 @@ export default function Tenants() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [viewTenant, setViewTenant] = useState<Tenant | null>(null);
   const [selectedIdType, setSelectedIdType] = useState<string>('');
 
   useEffect(() => {
@@ -54,7 +55,9 @@ export default function Tenants() {
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.phone.includes(searchQuery) ||
-        t.whatsappNumber?.includes(searchQuery)
+        t.secondaryPhone?.includes(searchQuery) ||
+        t.whatsappNumber?.includes(searchQuery) ||
+        t.secondaryWhatsappNumber?.includes(searchQuery)
       )
     : tenants;
 
@@ -83,7 +86,9 @@ export default function Tenants() {
         lastName: formData.get('lastName') as string,
         email: formData.get('email') as string,
         phone: formData.get('phone') as string,
+        secondaryPhone: (formData.get('secondaryPhone') as string) || undefined,
         whatsappNumber: formData.get('whatsappNumber') as string,
+        secondaryWhatsappNumber: (formData.get('secondaryWhatsappNumber') as string) || undefined,
         nationalId: idNumber || formData.get('nationalId') as string || editingTenant?.nationalId || '',
         emergencyContact: formData.get('emergencyContact') as string,
         emergencyPhone: formData.get('emergencyPhone') as string,
@@ -120,6 +125,10 @@ export default function Tenants() {
     setEditingTenant(tenant);
     setSelectedIdType(tenant.idType || '');
     setShowForm(true);
+  };
+
+  const handleView = (tenant: Tenant) => {
+    setViewTenant(tenant);
   };
 
   const handleDelete = async (id: string) => {
@@ -259,6 +268,14 @@ export default function Tenants() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
+                  <button
+                    onClick={() => handleView(tenant)}
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+                    title="View"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span className="text-sm font-medium">View</span>
+                  </button>
                   <button
                     onClick={() => handleEdit(tenant)}
                     className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -466,6 +483,35 @@ export default function Tenants() {
                 </div>
               </div>
 
+              {/* Secondary contacts */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Secondary Phone
+                  </label>
+                  <input
+                    type="tel"
+                    name="secondaryPhone"
+                    defaultValue={editingTenant?.secondaryPhone}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Optional secondary phone"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Secondary WhatsApp
+                  </label>
+                  <input
+                    type="tel"
+                    name="secondaryWhatsappNumber"
+                    defaultValue={editingTenant?.secondaryWhatsappNumber}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Optional secondary WhatsApp"
+                  />
+                </div>
+              </div>
+
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -599,6 +645,95 @@ export default function Tenants() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Tenant Modal */}
+      {viewTenant && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {viewTenant.firstName} {viewTenant.lastName}
+                </h2>
+                <p className="text-sm text-gray-600">
+                  {getTenantStatus(viewTenant.id) === 'Active' ? 'Active Contract' : 'No Active Contract'}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewTenant(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Contact</h3>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li><span className="font-medium">Phone:</span> {viewTenant.phone}</li>
+                    {viewTenant.secondaryPhone && (
+                      <li><span className="font-medium">Secondary Phone:</span> {viewTenant.secondaryPhone}</li>
+                    )}
+                    <li><span className="font-medium">WhatsApp:</span> {viewTenant.whatsappNumber}</li>
+                    {viewTenant.secondaryWhatsappNumber && (
+                      <li><span className="font-medium">Secondary WhatsApp:</span> {viewTenant.secondaryWhatsappNumber}</li>
+                    )}
+                    <li><span className="font-medium">Email:</span> {viewTenant.email}</li>
+                  </ul>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Identification</h3>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li><span className="font-medium">ID Type:</span> {viewTenant.idType || '—'}</li>
+                    <li><span className="font-medium">ID Number:</span> {viewTenant.idNumber || viewTenant.nationalId || '—'}</li>
+                    <li>
+                      <span className="font-medium">ID Expiry:</span>{' '}
+                      {viewTenant.idExpiryDate ? new Date(viewTenant.idExpiryDate).toLocaleDateString() : '—'}
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Preferences</h3>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li>
+                      <span className="font-medium">Payment Method:</span>{' '}
+                      {viewTenant.paymentMethod || getPreferredPaymentMethod(viewTenant.id) || '—'}
+                    </li>
+                    <li>
+                      <span className="font-medium">Notification:</span>{' '}
+                      {viewTenant.notificationPreference || '—'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Emergency</h3>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li><span className="font-medium">Contact:</span> {viewTenant.emergencyContact}</li>
+                    <li><span className="font-medium">Phone:</span> {viewTenant.emergencyPhone}</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Billing & Notes</h3>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Billing Address:</span> {viewTenant.billingAddress || '—'}
+                </p>
+                <p className="text-sm text-gray-700 mt-2">
+                  <span className="font-medium">Notes:</span> {viewTenant.notes || '—'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

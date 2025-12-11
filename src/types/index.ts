@@ -39,7 +39,9 @@ export interface Tenant {
   lastName: string;
   email: string;
   phone: string;
+  secondaryPhone?: string;
   whatsappNumber: string;
+  secondaryWhatsappNumber?: string;
   nationalId: string;
   emergencyContact: string;
   emergencyPhone: string;
