@@ -9,6 +9,7 @@ export default function Tenants() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadingTenants, setLoadingTenants] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [viewTenant, setViewTenant] = useState<Tenant | null>(null);
@@ -19,20 +20,30 @@ export default function Tenants() {
   }, []);
 
   const loadAllData = async () => {
+    // Phase 1: load tenants first to render quickly
+    setLoadingTenants(true);
     try {
-      const [tenantsData, contractsData, invoicesData, paymentsData] = await Promise.all([
-        dataService.getTenants(),
+      const tenantsData = await dataService.getTenants();
+      setTenants(tenantsData);
+      setLoadingTenants(false);
+    } catch (error) {
+      console.error('Error loading tenants:', error);
+      setTenants([]);
+      setLoadingTenants(false);
+    }
+
+    // Phase 2: load heavier related data in the background
+    try {
+      const [contractsData, invoicesData, paymentsData] = await Promise.all([
         dataService.getContracts(),
         dataService.getInvoices(),
         dataService.getPayments(),
       ]);
-      setTenants(tenantsData);
       setContracts(contractsData);
       setInvoices(invoicesData);
       setPayments(paymentsData);
     } catch (error) {
-      console.error('Error loading data:', error);
-      setTenants([]);
+      console.error('Error loading related data:', error);
       setContracts([]);
       setInvoices([]);
       setPayments([]);
@@ -233,7 +244,38 @@ export default function Tenants() {
 
       {/* Tenants Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredTenants.map((tenant) => {
+        {loadingTenants && filteredTenants.length === 0 && (
+          <>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={`tenant-skeleton-${idx}`}
+                className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 mr-3" />
+                    <div>
+                      <div className="h-4 w-32 bg-gray-100 rounded mb-2" />
+                      <div className="h-3 w-24 bg-gray-100 rounded" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <div className="w-8 h-8 bg-gray-100 rounded-lg" />
+                    <div className="w-8 h-8 bg-gray-100 rounded-lg" />
+                  </div>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="h-3 w-40 bg-gray-100 rounded" />
+                  <div className="h-3 w-48 bg-gray-100 rounded" />
+                  <div className="h-3 w-32 bg-gray-100 rounded" />
+                </div>
+                <div className="h-3 w-44 bg-gray-100 rounded" />
+              </div>
+            ))}
+          </>
+        )}
+
+        {!loadingTenants && filteredTenants.map((tenant) => {
           const status = getTenantStatus(tenant.id);
           const paymentMethod = tenant.paymentMethod 
             ? (tenant.paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 
@@ -327,7 +369,7 @@ export default function Tenants() {
         })}
       </div>
 
-      {filteredTenants.length === 0 && (
+        {filteredTenants.length === 0 && !loadingTenants && (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No tenants found</h3>
