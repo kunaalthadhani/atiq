@@ -3,8 +3,10 @@ import { Search, Receipt, Mail, MessageSquare, AlertCircle, CheckCircle, Clock, 
 import { dataService } from '@/services/dataService';
 import { InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn, generateWhatsAppLink, generateEmailLink } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Invoices() {
+  const { user } = useAuth();
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -200,7 +202,16 @@ Thank you!`;
         notes: (formData.get('notes') as string) || undefined,
       };
 
-      await dataService.createPayment(paymentData);
+      const result = await dataService.createPayment(
+        paymentData,
+        user?.id,
+        user?.role
+      );
+      
+      if ('requiresApproval' in result) {
+        alert(result.message || 'Payment request submitted for approval');
+      }
+      
       await loadInvoices();
       setShowPaymentForm(false);
       setPrefilledInvoice(null);

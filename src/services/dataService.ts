@@ -15,7 +15,8 @@ if (useSupabase) {
 // Import the old localStorage-based service logic
 import { 
   Property, Unit, Tenant, Contract, Invoice, Payment, Reminder,
-  ContractWithDetails, InvoiceWithDetails, DashboardStats
+  ContractWithDetails, InvoiceWithDetails, DashboardStats,
+  ApprovalRequestWithDetails, ApprovalStatus
 } from '@/types';
 
 // Simple localStorage-based service as fallback
@@ -205,7 +206,11 @@ class LocalStorageService {
     return true;
   }
 
-  async createContract(contract: Omit<Contract, 'id' | 'createdAt'>): Promise<{ success: boolean; message?: string; contract?: Contract }> {
+  async createContract(
+    contract: Omit<Contract, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<{ success: boolean; message?: string; contract?: Contract; requiresApproval?: boolean; approvalRequestId?: string }> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const newContract: Contract = {
       ...contract,
@@ -217,7 +222,11 @@ class LocalStorageService {
     return { success: true, contract: newContract };
   }
 
-  async terminateContract(id: string): Promise<boolean> {
+  async terminateContract(
+    id: string,
+    userId?: string,
+    userRole?: string
+  ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return false;
@@ -255,7 +264,11 @@ class LocalStorageService {
     return contract;
   }
 
-  async createPayment(payment: Omit<Payment, 'id' | 'createdAt'>): Promise<Payment> {
+  async createPayment(
+    payment: Omit<Payment, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const payments = this.loadFromStorage<Payment>('payments');
     const newPayment: Payment = {
       ...payment,
@@ -436,7 +449,37 @@ class LocalStorageService {
   }
 
   // Add other stub methods as needed...
+
+  // Approval methods (only work with Supabase)
+  async getApprovalRequests(
+    status?: ApprovalStatus,
+    userId?: string
+  ): Promise<ApprovalRequestWithDetails[]> {
+    // Approval system requires Supabase
+    return [];
+  }
+
+  async approveRequest(
+    requestId: string,
+    approverId: string
+  ): Promise<{ success: boolean; message?: string }> {
+    return { success: false, message: 'Approval system requires Supabase' };
+  }
+
+  async rejectRequest(
+    requestId: string,
+    approverId: string,
+    reason: string
+  ): Promise<{ success: boolean; message?: string }> {
+    return { success: false, message: 'Approval system requires Supabase' };
+  }
 }
 
 // Export the appropriate service
 export const dataService = useSupabase ? supabaseService : new LocalStorageService();
+
+// Add approval methods to dataService if using Supabase
+if (useSupabase) {
+  // These methods are already in supabaseService, so they'll be available
+  // We just need to ensure the types are correct
+}

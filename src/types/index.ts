@@ -154,3 +154,27 @@ export interface DashboardStats {
   collectionRate: number;
 }
 
+// Approval system types
+export type ApprovalRequestType = 'contract_create' | 'contract_terminate' | 'contract_cancel' | 'payment_create';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ApprovalRequest {
+  id: string;
+  requestType: ApprovalRequestType;
+  requestedBy: string; // User ID
+  approvedBy?: string; // User ID
+  status: ApprovalStatus;
+  entityType: 'contract' | 'payment';
+  entityId?: string; // ID after creation
+  requestData: any; // The full data for the request
+  rejectionReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  approvedAt?: Date;
+}
+
+export interface ApprovalRequestWithDetails extends ApprovalRequest {
+  requesterName?: string;
+  approverName?: string;
+}
+

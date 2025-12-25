@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { 
   Property, Unit, Tenant, Contract, Invoice, Payment, Reminder,
-  ContractWithDetails, InvoiceWithDetails, DashboardStats
+  ContractWithDetails, InvoiceWithDetails, DashboardStats,
+  ApprovalRequest, ApprovalRequestWithDetails, ApprovalRequestType, ApprovalStatus
 } from '@/types';
 
 // Check if Supabase is configured
@@ -194,6 +195,21 @@ const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => ({
   payment_method: payment.paymentMethod,
   reference_number: payment.referenceNumber,
   notes: payment.notes,
+});
+
+const mapApprovalRequest = (row: any): ApprovalRequest => ({
+  id: row.id,
+  requestType: row.request_type,
+  requestedBy: row.requested_by,
+  approvedBy: row.approved_by,
+  status: row.status,
+  entityType: row.entity_type,
+  entityId: row.entity_id,
+  requestData: row.request_data,
+  rejectionReason: row.rejection_reason,
+  createdAt: new Date(row.created_at),
+  updatedAt: new Date(row.updated_at),
+  approvedAt: row.approved_at ? new Date(row.approved_at) : undefined,
 });
 
 class SupabaseService {
@@ -565,8 +581,35 @@ class SupabaseService {
       .filter((c: ContractWithDetails) => c.tenant && c.unit && c.property);
   }
 
-  async createContract(contract: Omit<Contract, 'id' | 'createdAt'>): Promise<{ success: boolean; message?: string; contract?: Contract }> {
+  async createContract(
+    contract: Omit<Contract, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<{ success: boolean; message?: string; contract?: Contract; requiresApproval?: boolean; approvalRequestId?: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // If user is not admin, create approval request instead
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'contract_create',
+          'contract',
+          contract,
+          userId
+        );
+        return {
+          success: true,
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Contract creation request submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        return { success: false, message: error.message || 'Failed to create approval request' };
+      }
+    }
+    
+    // Admin can create directly - existing logic
     // Validate overlapping contracts for active status
     if (contract.status === 'active') {
       const { data: overlapping } = await supabase!
@@ -614,8 +657,34 @@ class SupabaseService {
     return { success: true, contract: newContract };
   }
 
-  async terminateContract(id: string): Promise<boolean> {
+  async terminateContract(
+    id: string,
+    userId?: string,
+    userRole?: string
+  ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) return false;
+    
+    // If user is not admin, create approval request instead
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'contract_terminate',
+          'contract',
+          { contractId: id },
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Contract termination request submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        return false;
+      }
+    }
+    
+    // Admin can terminate directly - existing logic
     // Update contract status to terminated
     const { error: contractError } = await supabase!
       .from('contracts')
@@ -944,8 +1013,34 @@ class SupabaseService {
     return data.map(mapPayment);
   }
 
-  async createPayment(payment: Omit<Payment, 'id' | 'createdAt'>): Promise<Payment> {
+  async createPayment(
+    payment: Omit<Payment, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // If user is not admin, create approval request instead
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'payment_create',
+          'payment',
+          payment,
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Payment request submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        throw error;
+      }
+    }
+    
+    // Admin can create directly - existing logic
     const { data, error } = await supabase!
       .from('payments')
       .insert(toPaymentRow(payment))
@@ -1014,6 +1109,179 @@ class SupabaseService {
     
     // The database trigger will update the invoice automatically
     return true;
+  }
+
+  // ============================================
+  // APPROVAL REQUESTS
+  // ============================================
+  async createApprovalRequest(
+    requestType: ApprovalRequestType,
+    entityType: 'contract' | 'payment',
+    requestData: any,
+    userId: string
+  ): Promise<ApprovalRequest> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    const { data, error } = await supabase!
+      .from('approval_requests')
+      .insert({
+        request_type: requestType,
+        requested_by: userId,
+        status: 'pending',
+        entity_type: entityType,
+        request_data: requestData,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating approval request:', error);
+      throw error;
+    }
+    
+    return mapApprovalRequest(data);
+  }
+
+  async getApprovalRequests(
+    status?: ApprovalStatus,
+    userId?: string
+  ): Promise<ApprovalRequestWithDetails[]> {
+    if (!this.checkSupabase()) return [];
+    
+    let query = supabase!
+      .from('approval_requests')
+      .select(`
+        *,
+        requester:users!approval_requests_requested_by_fkey(id, name, email),
+        approver:users!approval_requests_approved_by_fkey(id, name, email)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    if (userId) {
+      query = query.eq('requested_by', userId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching approval requests:', error);
+      return [];
+    }
+    
+    return data.map((row: any) => ({
+      ...mapApprovalRequest(row),
+      requesterName: row.requester?.name,
+      approverName: row.approver?.name,
+    }));
+  }
+
+  async approveRequest(
+    requestId: string,
+    approverId: string
+  ): Promise<{ success: boolean; message?: string }> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Get the request
+    const { data: request, error: fetchError } = await supabase!
+      .from('approval_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    
+    if (fetchError || !request) {
+      return { success: false, message: 'Request not found' };
+    }
+    
+    if (request.status !== 'pending') {
+      return { success: false, message: 'Request already processed' };
+    }
+    
+    // Process based on request type
+    let entityId: string | null = null;
+    
+    try {
+      switch (request.request_type) {
+        case 'contract_create':
+          const contractResult = await this.createContract(request.request_data, approverId, 'admin');
+          if (contractResult.success && contractResult.contract) {
+            entityId = contractResult.contract.id;
+          } else {
+            return { success: false, message: contractResult.message || 'Failed to create contract' };
+          }
+          break;
+          
+        case 'contract_terminate':
+          const terminated = await this.terminateContract(request.request_data.contractId, approverId, 'admin');
+          if (terminated === true) {
+            entityId = request.request_data.contractId;
+          } else {
+            return { success: false, message: 'Failed to terminate contract' };
+          }
+          break;
+          
+        case 'payment_create':
+          const paymentResult = await this.createPayment(request.request_data, approverId, 'admin');
+          if ('id' in paymentResult) {
+            entityId = paymentResult.id;
+          } else {
+            return { success: false, message: 'Failed to create payment' };
+          }
+          break;
+          
+        default:
+          return { success: false, message: 'Unknown request type' };
+      }
+      
+      // Update approval request
+      const { error: updateError } = await supabase!
+        .from('approval_requests')
+        .update({
+          status: 'approved',
+          approved_by: approverId,
+          approved_at: new Date().toISOString(),
+          entity_id: entityId,
+        })
+        .eq('id', requestId);
+      
+      if (updateError) {
+        console.error('Error updating approval request:', updateError);
+        return { success: false, message: 'Failed to update approval status' };
+      }
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error processing approval:', error);
+      return { success: false, message: error.message || 'Failed to process approval' };
+    }
+  }
+
+  async rejectRequest(
+    requestId: string,
+    approverId: string,
+    reason: string
+  ): Promise<{ success: boolean; message?: string }> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    const { error } = await supabase!
+      .from('approval_requests')
+      .update({
+        status: 'rejected',
+        approved_by: approverId,
+        rejection_reason: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', requestId);
+    
+    if (error) {
+      console.error('Error rejecting request:', error);
+      return { success: false, message: error.message };
+    }
+    
+    return { success: true };
   }
 
   // ============================================

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
-  Receipt, Wallet, Calendar, X, Bell, LogOut 
+  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Reminder } from '@/types';
@@ -18,6 +18,7 @@ const navigation = [
   { name: 'Invoices', href: '/invoices', icon: Receipt },
   { name: 'Payments', href: '/payments', icon: Wallet },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
+  { name: 'Approvals', href: '/approvals', icon: CheckCircle, adminOnly: true },
 ];
 
 export default function Layout() {
@@ -76,6 +77,11 @@ export default function Layout() {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
+              // Hide admin-only items for non-admin users
+              if (item.adminOnly && user?.role !== 'admin') {
+                return null;
+              }
+              
               const isActive = location.pathname === item.href;
               return (
                 <Link

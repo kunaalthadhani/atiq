@@ -4,6 +4,7 @@ import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
 import { differenceInMonths, addYears, subDays } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Helper function to format payment frequency for display
 const formatPaymentFrequency = (frequency: string): string => {
@@ -24,6 +25,7 @@ const formatPaymentFrequency = (frequency: string): string => {
 };
 
 export default function Contracts() {
+  const { user } = useAuth();
   const [contracts, setContracts] = useState<ContractWithDetails[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -190,9 +192,16 @@ export default function Contracts() {
     };
 
     try {
-      const result = await dataService.createContract(contractData);
+      const result = await dataService.createContract(
+        contractData,
+        user?.id,
+        user?.role
+      );
       
       if (result.success) {
+        if (result.requiresApproval) {
+          alert(result.message || 'Contract creation request submitted for approval');
+        }
         await loadData();
         setShowForm(false);
         // Reset form state
@@ -216,7 +225,10 @@ export default function Contracts() {
   const handleTerminate = async (id: string) => {
     if (confirm('Are you sure you want to terminate this contract? This will mark the unit as vacant and cancel unpaid invoices.')) {
       try {
-        await dataService.terminateContract(id);
+        const result = await dataService.terminateContract(id, user?.id, user?.role);
+        if (typeof result === 'object' && 'requiresApproval' in result) {
+          alert(result.message || 'Contract termination request submitted for approval');
+        }
         await loadData();
       } catch (error) {
         console.error('Error terminating contract:', error);

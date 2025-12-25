@@ -3,8 +3,10 @@ import { Plus, Search, Wallet, X, Trash2, Share2, MessageSquare, Mail, TrendingU
 import { dataService } from '@/services/dataService';
 import { Payment, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, generateWhatsAppLink, generateEmailLink, cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Payments() {
+  const { user } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,7 +122,16 @@ export default function Payments() {
     };
 
     try {
-      await dataService.createPayment(paymentData);
+      const result = await dataService.createPayment(
+        paymentData,
+        user?.id,
+        user?.role
+      );
+      
+      if ('requiresApproval' in result) {
+        alert(result.message || 'Payment request submitted for approval');
+      }
+      
       await loadData();
       setShowForm(false);
       setSelectedInvoiceId('');

@@ -11,6 +11,7 @@ import Contracts from './pages/Contracts';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Calendar from './pages/Calendar';
+import Approvals from './pages/Approvals';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
           <Route path="invoices" element={<Invoices />} />
           <Route path="payments" element={<Payments />} />
           <Route path="calendar" element={<Calendar />} />
+          <Route path="approvals" element={<Approvals />} />
         </Route>
       </Routes>
     </AuthProvider>
