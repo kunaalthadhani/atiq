@@ -245,6 +245,16 @@ class LocalStorageService {
     return true;
   }
 
+  async updateContract(id: string, updates: Partial<Omit<Contract, 'id' | 'createdAt'>>): Promise<Contract | null> {
+    const contracts = this.loadFromStorage<Contract>('contracts');
+    const contract = contracts.find(c => c.id === id);
+    if (!contract) return null;
+
+    Object.assign(contract, updates);
+    this.saveToStorage('contracts', contracts);
+    return contract;
+  }
+
   async createPayment(payment: Omit<Payment, 'id' | 'createdAt'>): Promise<Payment> {
     const payments = this.loadFromStorage<Payment>('payments');
     const newPayment: Payment = {
@@ -259,13 +269,20 @@ class LocalStorageService {
     const invoices = this.loadFromStorage<Invoice>('invoices');
     const invoice = invoices.find(inv => inv.id === payment.invoiceId);
     if (invoice) {
-      invoice.paidAmount = (invoice.paidAmount || 0) + payment.amount;
-      invoice.remainingAmount = invoice.amount - invoice.paidAmount;
+      // Round amounts to 2 decimal places to avoid floating-point precision issues
+      const newPaidAmount = Math.round(((invoice.paidAmount || 0) + payment.amount) * 100) / 100;
+      const newRemainingAmount = Math.round((invoice.amount - newPaidAmount) * 100) / 100;
+      
+      invoice.paidAmount = newPaidAmount;
+      invoice.remainingAmount = newRemainingAmount;
       
       // Update status
-      if (invoice.remainingAmount <= 0) {
+      if (newRemainingAmount <= 0.01) {
         invoice.status = 'paid';
-      } else if (invoice.paidAmount > 0) {
+        // Ensure remaining amount is exactly 0 when paid
+        invoice.remainingAmount = 0;
+        invoice.paidAmount = invoice.amount;
+      } else if (newPaidAmount > 0) {
         invoice.status = invoice.status === 'pending' ? 'partial' : invoice.status;
       }
       

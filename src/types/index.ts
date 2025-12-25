@@ -57,7 +57,7 @@ export interface Tenant {
 }
 
 export type ContractStatus = 'active' | 'expired' | 'terminated' | 'draft';
-export type PaymentFrequency = 'monthly' | 'quarterly' | 'semi-annual' | 'annual';
+export type PaymentFrequency = 'monthly' | '1_payment' | '2_payment' | '3_payment' | '4_payment';
 export type ReminderPeriod = '3_days' | '1_week' | '2_weeks' | '1_month';
 
 export interface Contract {
@@ -76,6 +76,7 @@ export interface Contract {
   createdAt: Date;
   contractNumber?: string;
   dueDateDay?: number; // Day of month for invoice due dates (1-31)
+  attachments?: string[]; // Array of file URLs or base64 strings
 }
 
 export type InvoiceStatus = 'pending' | 'paid' | 'partial' | 'overdue' | 'cancelled';

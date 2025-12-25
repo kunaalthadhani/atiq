@@ -1,9 +1,27 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban } from 'lucide-react';
+import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban, Upload, Paperclip, Trash2 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
-import { differenceInMonths } from 'date-fns';
+import { differenceInMonths, addYears, subDays } from 'date-fns';
+
+// Helper function to format payment frequency for display
+const formatPaymentFrequency = (frequency: string): string => {
+  switch (frequency) {
+    case 'monthly':
+      return 'Monthly';
+    case '1_payment':
+      return '1 payment';
+    case '2_payment':
+      return '2 payment';
+    case '3_payment':
+      return '3 payment';
+    case '4_payment':
+      return '4 payment';
+    default:
+      return frequency;
+  }
+};
 
 export default function Contracts() {
   const [contracts, setContracts] = useState<ContractWithDetails[]>([]);
@@ -22,9 +40,12 @@ export default function Contracts() {
   const [formEndDate, setFormEndDate] = useState<string>('');
   const [formFrequency, setFormFrequency] = useState<string>('monthly');
   const [calculatedInstallments, setCalculatedInstallments] = useState<number>(0);
+  const [contractDuration, setContractDuration] = useState<string>(''); // '1_year', 'custom', etc.
   const [showTenantForm, setShowTenantForm] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
+  const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
+  const [contractAttachments, setContractAttachments] = useState<string[]>([]);
 
   useEffect(() => {
     loadData();
@@ -106,20 +127,37 @@ export default function Contracts() {
     currentPage * itemsPerPage
   );
 
+  // Auto-calculate end date for 1-year contracts
+  useEffect(() => {
+    if (formStartDate && contractDuration === '1_year') {
+      const start = new Date(formStartDate);
+      // Add 1 year, then subtract 1 day (so Jan 1 -> Dec 31)
+      const oneYearLater = addYears(start, 1);
+      const endDate = subDays(oneYearLater, 1);
+      setFormEndDate(endDate.toISOString().split('T')[0]);
+    }
+  }, [formStartDate, contractDuration]);
+
   // Calculate installments based on dates and frequency
   useEffect(() => {
     if (formStartDate && formEndDate && formFrequency) {
-      const start = new Date(formStartDate);
-      const end = new Date(formEndDate);
-      
-      let intervalMonths = 1;
-      if (formFrequency === 'quarterly') intervalMonths = 3;
-      else if (formFrequency === 'semi-annual') intervalMonths = 6;
-      else if (formFrequency === 'annual') intervalMonths = 12;
-      
-      const totalMonths = differenceInMonths(end, start);
-      const installments = Math.max(1, Math.floor(totalMonths / intervalMonths));
-      setCalculatedInstallments(installments);
+      if (formFrequency === 'monthly') {
+        const start = new Date(formStartDate);
+        const end = new Date(formEndDate);
+        const totalMonths = differenceInMonths(end, start);
+        const installments = Math.max(1, totalMonths);
+        setCalculatedInstallments(installments);
+      } else if (formFrequency === '1_payment') {
+        setCalculatedInstallments(1);
+      } else if (formFrequency === '2_payment') {
+        setCalculatedInstallments(2);
+      } else if (formFrequency === '3_payment') {
+        setCalculatedInstallments(3);
+      } else if (formFrequency === '4_payment') {
+        setCalculatedInstallments(4);
+      } else {
+        setCalculatedInstallments(0);
+      }
     } else {
       setCalculatedInstallments(0);
     }
@@ -165,6 +203,7 @@ export default function Contracts() {
         setFormEndDate('');
         setFormFrequency('monthly');
         setCalculatedInstallments(0);
+        setContractDuration('');
       } else {
         setError(result.message || 'Failed to create contract');
       }
@@ -196,6 +235,7 @@ export default function Contracts() {
     setFormEndDate('');
     setFormFrequency('monthly');
     setCalculatedInstallments(0);
+    setContractDuration('');
   };
 
   const getAvailableProperties = () => {
@@ -353,7 +393,7 @@ export default function Contracts() {
                     <div className="flex items-center">
                       <FileText className="w-3.5 h-3.5 mr-1.5 text-primary-600" />
                       <span className="text-gray-600">
-                        Payment: <span className="font-medium text-gray-900">{contract.paymentFrequency}</span>
+                        Payment: <span className="font-medium text-gray-900">{formatPaymentFrequency(contract.paymentFrequency)}</span>
                       </span>
                     </div>
                     <div className="flex items-center">
@@ -388,7 +428,10 @@ export default function Contracts() {
                 {/* Actions */}
                 <div className="flex gap-2 ml-4 flex-shrink-0">
                   <button
-                    onClick={() => setViewingContract(contract)}
+                    onClick={() => {
+                      setViewingContract(contract);
+                      setContractAttachments(contract.attachments || []);
+                    }}
                     className="px-3 py-1.5 border border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors text-xs font-medium"
                   >
                     View
@@ -580,6 +623,27 @@ export default function Contracts() {
                 </div>
               </div>
 
+              {/* Contract Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contract Duration
+                </label>
+                <select
+                  value={contractDuration}
+                  onChange={(e) => {
+                    setContractDuration(e.target.value);
+                    if (e.target.value === 'custom') {
+                      setFormEndDate('');
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                >
+                  <option value="">Select Duration</option>
+                  <option value="1_year">1 Year (Auto: End date = 1 day before anniversary)</option>
+                  <option value="custom">Custom (Manual dates)</option>
+                </select>
+              </div>
+
               {/* Start & End Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -605,7 +669,12 @@ export default function Contracts() {
                     name="endDate"
                     required
                     value={formEndDate}
-                    onChange={(e) => setFormEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setFormEndDate(e.target.value);
+                      if (contractDuration === '1_year') {
+                        setContractDuration('custom'); // Switch to custom if manually changed
+                      }
+                    }}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>
@@ -624,9 +693,10 @@ export default function Contracts() {
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
                   >
                     <option value="monthly">Monthly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="semi-annual">Semi Annual</option>
-                    <option value="annual">Annual</option>
+                    <option value="1_payment">1 payment</option>
+                    <option value="2_payment">2 payment</option>
+                    <option value="3_payment">3 payment</option>
+                    <option value="4_payment">4 payment</option>
                   </select>
                 </div>
 
@@ -787,7 +857,7 @@ export default function Contracts() {
                   <p><span className="text-gray-600">End Date:</span> <span className="font-medium">{formatDate(viewingContract.endDate)}</span></p>
                   <p><span className="text-gray-600">Monthly Rent:</span> <span className="font-medium">{formatCurrency(viewingContract.monthlyRent)}</span></p>
                   <p><span className="text-gray-600">Security Deposit:</span> <span className="font-medium">{formatCurrency(viewingContract.securityDeposit)}</span></p>
-                  <p><span className="text-gray-600">Payment Frequency:</span> <span className="font-medium">{viewingContract.paymentFrequency}</span></p>
+                  <p><span className="text-gray-600">Payment Frequency:</span> <span className="font-medium">{formatPaymentFrequency(viewingContract.paymentFrequency)}</span></p>
                   <p><span className="text-gray-600">Installments:</span> <span className="font-medium">{viewingContract.numberOfInstallments}</span></p>
                   {viewingContract.reminderPeriod && (
                     <p><span className="text-gray-600">Reminder:</span> <span className="font-medium">{viewingContract.reminderPeriod.replace('_', ' ')}</span></p>
@@ -834,6 +904,160 @@ export default function Contracts() {
                   <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">{viewingContract.notes}</p>
                 </div>
               )}
+
+              {/* Attachments Section */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900">Attachments</h3>
+                  <button
+                    onClick={() => {
+                      setEditingContract(viewingContract);
+                      setContractAttachments(viewingContract.attachments || []);
+                    }}
+                    className="flex items-center px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Add Attachment
+                  </button>
+                </div>
+                {viewingContract.attachments && viewingContract.attachments.length > 0 ? (
+                  <div className="space-y-2">
+                    {viewingContract.attachments.map((attachment, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center">
+                          <Paperclip className="w-4 h-4 text-gray-600 mr-2" />
+                          <span className="text-sm text-gray-700">
+                            {attachment.startsWith('data:') ? `Attachment ${index + 1}` : attachment.split('/').pop() || `Attachment ${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          {attachment.startsWith('data:') || attachment.startsWith('http') ? (
+                            <a
+                              href={attachment}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-green-600 hover:text-green-700"
+                            >
+                              View
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No attachments yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Contract Attachments Modal */}
+      {editingContract && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between rounded-t-xl">
+              <h2 className="text-xl font-bold text-gray-900">Manage Attachments</h2>
+              <button
+                onClick={() => {
+                  setEditingContract(null);
+                  setContractAttachments([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Current Attachments */}
+              {contractAttachments.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-gray-700">Current Attachments</h3>
+                  {contractAttachments.map((attachment, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center flex-1 min-w-0">
+                        <Paperclip className="w-4 h-4 text-gray-600 mr-2 flex-shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">
+                          {attachment.startsWith('data:') ? `Attachment ${index + 1}` : attachment.split('/').pop() || `Attachment ${index + 1}`}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setContractAttachments(contractAttachments.filter((_, i) => i !== index));
+                        }}
+                        className="ml-2 p-1 text-red-600 hover:text-red-700 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload New Attachment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Add New Attachment
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Convert to base64 for storage
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const base64 = event.target?.result as string;
+                        setContractAttachments([...contractAttachments, base64]);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Supported: PDF, DOC, DOCX, JPG, PNG, TXT</p>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingContract(null);
+                    setContractAttachments([]);
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await dataService.updateContract(editingContract.id, { attachments: contractAttachments });
+                      await loadData();
+                      // Reload the contract to get updated data
+                      const updatedContracts = await dataService.getContracts();
+                      const updatedContract = updatedContracts.find(c => c.id === editingContract.id);
+                      if (updatedContract) {
+                        setViewingContract(updatedContract);
+                      }
+                      setEditingContract(null);
+                      setContractAttachments([]);
+                    } catch (error) {
+                      console.error('Error updating attachments:', error);
+                      alert('Failed to update attachments. Please try again.');
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+                >
+                  Save Attachments
+                </button>
+              </div>
             </div>
           </div>
         </div>

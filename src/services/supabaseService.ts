@@ -80,6 +80,7 @@ const mapContract = (row: any): Contract => ({
   createdAt: new Date(row.created_at),
   contractNumber: row.contract_number,
   dueDateDay: row.due_date_day,
+  attachments: row.attachments || [],
 });
 
 const mapInvoice = (row: any): Invoice => ({
@@ -183,11 +184,12 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
   reminder_period: contract.reminderPeriod,
   due_date_day: contract.dueDateDay,
   notes: contract.notes,
+  attachments: contract.attachments || [],
 });
 
 const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => ({
   invoice_id: payment.invoiceId,
-  amount: payment.amount,
+  amount: Math.round(payment.amount * 100) / 100, // Round to 2 decimal places
   payment_date: payment.paymentDate.toISOString().split('T')[0],
   payment_method: payment.paymentMethod,
   reference_number: payment.referenceNumber,
@@ -650,17 +652,68 @@ class SupabaseService {
     return true;
   }
 
+  async updateContract(id: string, updates: Partial<Omit<Contract, 'id' | 'createdAt'>>): Promise<Contract | null> {
+    if (!this.checkSupabase()) return null;
+    
+    const updateData: any = {};
+    if (updates.tenantId !== undefined) updateData.tenant_id = updates.tenantId;
+    if (updates.unitId !== undefined) updateData.unit_id = updates.unitId;
+    if (updates.contractNumber !== undefined) updateData.contract_number = updates.contractNumber;
+    if (updates.startDate !== undefined) updateData.start_date = updates.startDate.toISOString().split('T')[0];
+    if (updates.endDate !== undefined) updateData.end_date = updates.endDate.toISOString().split('T')[0];
+    if (updates.monthlyRent !== undefined) updateData.monthly_rent = updates.monthlyRent;
+    if (updates.securityDeposit !== undefined) updateData.security_deposit = updates.securityDeposit;
+    if (updates.paymentFrequency !== undefined) updateData.payment_frequency = updates.paymentFrequency;
+    if (updates.numberOfInstallments !== undefined) updateData.number_of_installments = updates.numberOfInstallments;
+    if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.reminderPeriod !== undefined) updateData.reminder_period = updates.reminderPeriod;
+    if (updates.dueDateDay !== undefined) updateData.due_date_day = updates.dueDateDay;
+    if (updates.notes !== undefined) updateData.notes = updates.notes;
+    if (updates.attachments !== undefined) updateData.attachments = updates.attachments;
+
+    const { data, error } = await supabase!
+      .from('contracts')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating contract:', error);
+      return null;
+    }
+
+    return data ? mapContract(data) : null;
+  }
+
   private async generateInvoicesForContract(contract: Contract) {
     // This will be handled by database triggers or can be done here
     // For now, we'll create invoices manually
-    const { addMonths } = await import('date-fns');
+    const { addMonths, differenceInMonths } = await import('date-fns');
+    
+    const totalMonths = differenceInMonths(contract.endDate, contract.startDate);
+    const totalContractValue = contract.monthlyRent * totalMonths;
     
     let intervalMonths = 1;
-    if (contract.paymentFrequency === 'quarterly') intervalMonths = 3;
-    else if (contract.paymentFrequency === 'semi-annual') intervalMonths = 6;
-    else if (contract.paymentFrequency === 'annual') intervalMonths = 12;
+    let amountPerInstallment = contract.monthlyRent;
+    
+    if (contract.paymentFrequency === 'monthly') {
+      intervalMonths = 1;
+      amountPerInstallment = contract.monthlyRent;
+    } else if (contract.paymentFrequency === '1_payment') {
+      intervalMonths = totalMonths;
+      amountPerInstallment = totalContractValue;
+    } else if (contract.paymentFrequency === '2_payment') {
+      intervalMonths = Math.floor(totalMonths / 2);
+      amountPerInstallment = totalContractValue / 2;
+    } else if (contract.paymentFrequency === '3_payment') {
+      intervalMonths = Math.floor(totalMonths / 3);
+      amountPerInstallment = totalContractValue / 3;
+    } else if (contract.paymentFrequency === '4_payment') {
+      intervalMonths = Math.floor(totalMonths / 4);
+      amountPerInstallment = totalContractValue / 4;
+    }
 
-    const amountPerInstallment = contract.monthlyRent * intervalMonths;
     const invoices = [];
 
     for (let i = 0; i < contract.numberOfInstallments; i++) {
@@ -912,24 +965,36 @@ class SupabaseService {
       .single();
 
     if (invoiceData) {
-      const newPaidAmount = (invoiceData.paid_amount || 0) + payment.amount;
-      const newRemainingAmount = invoiceData.amount - newPaidAmount;
+      // Round amounts to 2 decimal places to avoid floating-point precision issues
+      const newPaidAmount = Math.round(((invoiceData.paid_amount || 0) + payment.amount) * 100) / 100;
+      const newRemainingAmount = Math.round((invoiceData.amount - newPaidAmount) * 100) / 100;
       
       let newStatus = 'pending';
-      if (newRemainingAmount <= 0) {
+      // Use a small epsilon (0.01) for comparison to handle floating-point precision
+      if (newRemainingAmount <= 0.01) {
         newStatus = 'paid';
+        // Ensure remaining amount is exactly 0 when paid
+        const finalRemainingAmount = 0;
+        const finalPaidAmount = invoiceData.amount;
+        await supabase!
+          .from('invoices')
+          .update({
+            paid_amount: finalPaidAmount,
+            remaining_amount: finalRemainingAmount,
+            status: newStatus,
+          })
+          .eq('id', payment.invoiceId);
       } else if (newPaidAmount > 0) {
         newStatus = 'partial';
+        await supabase!
+          .from('invoices')
+          .update({
+            paid_amount: newPaidAmount,
+            remaining_amount: newRemainingAmount,
+            status: newStatus,
+          })
+          .eq('id', payment.invoiceId);
       }
-
-      await supabase!
-        .from('invoices')
-        .update({
-          paid_amount: newPaidAmount,
-          remaining_amount: newRemainingAmount,
-          status: newStatus,
-        })
-        .eq('id', payment.invoiceId);
     }
     
     return mapPayment(data);
