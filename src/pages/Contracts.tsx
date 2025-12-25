@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban, Upload, Paperclip, Trash2 } from 'lucide-react';
+import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban, Paperclip, Trash2 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
@@ -219,7 +219,7 @@ export default function Contracts() {
           // Create approval request for status change
           try {
             const { supabaseService } = await import('@/services/supabaseService');
-            const approvalRequest = await supabaseService.createApprovalRequest(
+            await supabaseService.createApprovalRequest(
               'contract_create',
               'contract',
               { ...contractData, id: editingContract.id, isUpdate: true },

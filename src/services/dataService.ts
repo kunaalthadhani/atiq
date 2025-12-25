@@ -208,8 +208,8 @@ class LocalStorageService {
 
   async createContract(
     contract: Omit<Contract, 'id' | 'createdAt'>,
-    userId?: string,
-    userRole?: string
+    _userId?: string,
+    _userRole?: string
   ): Promise<{ success: boolean; message?: string; contract?: Contract; requiresApproval?: boolean; approvalRequestId?: string }> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const newContract: Contract = {
@@ -224,8 +224,8 @@ class LocalStorageService {
 
   async terminateContract(
     id: string,
-    userId?: string,
-    userRole?: string
+    _userId?: string,
+    _userRole?: string
   ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
@@ -257,8 +257,8 @@ class LocalStorageService {
   async updateContract(
     id: string, 
     updates: Partial<Omit<Contract, 'id' | 'createdAt'>>,
-    userId?: string,
-    userRole?: string
+    _userId?: string,
+    _userRole?: string
   ): Promise<Contract | null> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
@@ -281,8 +281,8 @@ class LocalStorageService {
 
   async createPayment(
     payment: Omit<Payment, 'id' | 'createdAt'>,
-    userId?: string,
-    userRole?: string
+    _userId?: string,
+    _userRole?: string
   ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const payments = this.loadFromStorage<Payment>('payments');
     const newPayment: Payment = {
@@ -322,8 +322,8 @@ class LocalStorageService {
 
   async deletePayment(
     paymentId: string,
-    userId?: string,
-    userRole?: string
+    _userId?: string,
+    _userRole?: string
   ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const payments = this.loadFromStorage<Payment>('payments');
     const payment = payments.find(p => p.id === paymentId);
@@ -331,11 +331,7 @@ class LocalStorageService {
 
     // Approval system requires Supabase
     // For localStorage, we'll just allow deletion (no approval system)
-    if (userId && userRole !== 'admin') {
-      // In a real scenario with Supabase, this would create an approval request
-      // For now, we'll just return false to indicate it needs approval
-      return false;
-    }
+    // Note: In production with Supabase, approval would be handled by supabaseService
 
     const filtered = payments.filter(p => p.id !== paymentId);
     this.saveToStorage('payments', filtered);
@@ -479,24 +475,24 @@ class LocalStorageService {
 
   // Approval methods (only work with Supabase)
   async getApprovalRequests(
-    status?: ApprovalStatus,
-    userId?: string
+    _status?: ApprovalStatus,
+    _userId?: string
   ): Promise<ApprovalRequestWithDetails[]> {
     // Approval system requires Supabase
     return [];
   }
 
   async approveRequest(
-    requestId: string,
-    approverId: string
+    _requestId: string,
+    _approverId: string
   ): Promise<{ success: boolean; message?: string }> {
     return { success: false, message: 'Approval system requires Supabase' };
   }
 
   async rejectRequest(
-    requestId: string,
-    approverId: string,
-    reason: string
+    _requestId: string,
+    _approverId: string,
+    _reason: string
   ): Promise<{ success: boolean; message?: string }> {
     return { success: false, message: 'Approval system requires Supabase' };
   }

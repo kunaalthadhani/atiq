@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, FileText, DollarSign, AlertCircle } from 'lucide-react';
+import { FileText, DollarSign, AlertCircle } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApprovalRequestWithDetails, ApprovalRequestType } from '@/types';
