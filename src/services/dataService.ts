@@ -254,10 +254,25 @@ class LocalStorageService {
     return true;
   }
 
-  async updateContract(id: string, updates: Partial<Omit<Contract, 'id' | 'createdAt'>>): Promise<Contract | null> {
+  async updateContract(
+    id: string, 
+    updates: Partial<Omit<Contract, 'id' | 'createdAt'>>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Contract | null> {
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return null;
+
+    // Prevent editing active contracts
+    if (contract.status === 'active' && updates.status !== 'terminated') {
+      const allowedFields = ['status'];
+      const updateKeys = Object.keys(updates);
+      const hasDisallowedFields = updateKeys.some(key => !allowedFields.includes(key));
+      if (hasDisallowedFields) {
+        throw new Error('Active contracts cannot be edited. Only termination is allowed.');
+      }
+    }
 
     Object.assign(contract, updates);
     this.saveToStorage('contracts', contracts);
@@ -305,10 +320,22 @@ class LocalStorageService {
     return newPayment;
   }
 
-  async deletePayment(paymentId: string): Promise<boolean> {
+  async deletePayment(
+    paymentId: string,
+    userId?: string,
+    userRole?: string
+  ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const payments = this.loadFromStorage<Payment>('payments');
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) return false;
+
+    // Approval system requires Supabase
+    // For localStorage, we'll just allow deletion (no approval system)
+    if (userId && userRole !== 'admin') {
+      // In a real scenario with Supabase, this would create an approval request
+      // For now, we'll just return false to indicate it needs approval
+      return false;
+    }
 
     const filtered = payments.filter(p => p.id !== paymentId);
     this.saveToStorage('payments', filtered);

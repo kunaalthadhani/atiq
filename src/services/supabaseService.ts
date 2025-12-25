@@ -721,8 +721,46 @@ class SupabaseService {
     return true;
   }
 
-  async updateContract(id: string, updates: Partial<Omit<Contract, 'id' | 'createdAt'>>): Promise<Contract | null> {
+  async updateContract(
+    id: string, 
+    updates: Partial<Omit<Contract, 'id' | 'createdAt'>>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Contract | null> {
     if (!this.checkSupabase()) return null;
+    
+    // Get current contract to check status
+    const { data: currentContract, error: fetchError } = await supabase!
+      .from('contracts')
+      .select('status')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError || !currentContract) {
+      console.error('Error fetching contract:', fetchError);
+      return null;
+    }
+    
+    // Prevent editing active contracts (only allow status changes to terminated)
+    if (currentContract.status === 'active') {
+      // Only allow status change to terminated (which requires approval)
+      if (updates.status && updates.status !== 'terminated') {
+        throw new Error('Active contracts cannot be edited. Only termination is allowed.');
+      }
+      // If trying to change anything else, block it
+      const allowedFields = ['status'];
+      const updateKeys = Object.keys(updates);
+      const hasDisallowedFields = updateKeys.some(key => !allowedFields.includes(key));
+      if (hasDisallowedFields && updates.status !== 'terminated') {
+        throw new Error('Active contracts cannot be edited. Only termination is allowed.');
+      }
+    }
+    
+    // If changing status from draft to active, require approval for non-admins
+    // This should be handled in the UI layer, but as a safety check:
+    if (currentContract.status === 'draft' && updates.status === 'active' && userRole !== 'admin' && userId) {
+      throw new Error('Changing contract status to active requires admin approval');
+    }
     
     const updateData: any = {};
     if (updates.tenantId !== undefined) updateData.tenant_id = updates.tenantId;
@@ -738,7 +776,7 @@ class SupabaseService {
     if (updates.reminderPeriod !== undefined) updateData.reminder_period = updates.reminderPeriod;
     if (updates.dueDateDay !== undefined) updateData.due_date_day = updates.dueDateDay;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
-    if (updates.attachments !== undefined) updateData.attachments = updates.attachments;
+    if (updates.attachments !== undefined) updateData.attachments = updates.attachments || [];
 
     const { data, error } = await supabase!
       .from('contracts')
@@ -752,7 +790,14 @@ class SupabaseService {
       return null;
     }
 
-    return data ? mapContract(data) : null;
+    const updatedContract = mapContract(data);
+    
+    // If status changed to active, generate invoices
+    if (currentContract.status !== 'active' && updates.status === 'active') {
+      await this.generateInvoicesForContract(updatedContract);
+    }
+    
+    return updatedContract;
   }
 
   private async generateInvoicesForContract(contract: Contract) {
@@ -1095,8 +1140,46 @@ class SupabaseService {
     return mapPayment(data);
   }
 
-  async deletePayment(paymentId: string): Promise<boolean> {
+  async deletePayment(
+    paymentId: string,
+    userId?: string,
+    userRole?: string
+  ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) return false;
+    
+    // Get payment details for the approval request
+    const { data: paymentData, error: fetchError } = await supabase!
+      .from('payments')
+      .select('*')
+      .eq('id', paymentId)
+      .single();
+    
+    if (fetchError || !paymentData) {
+      console.error('Error fetching payment:', fetchError);
+      return false;
+    }
+    
+    // If user is not admin, create approval request instead
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'payment_delete',
+          'payment',
+          { paymentId, payment: mapPayment(paymentData) },
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Payment deletion request submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        return false;
+      }
+    }
+    
+    // Admin can delete directly
     const { error } = await supabase!
       .from('payments')
       .delete()
@@ -1107,7 +1190,55 @@ class SupabaseService {
       return false;
     }
     
-    // The database trigger will update the invoice automatically
+    // Update invoice amounts manually (since we're deleting the payment)
+    const payment = mapPayment(paymentData);
+    const { data: invoiceData } = await supabase!
+      .from('invoices')
+      .select('paid_amount, remaining_amount, amount')
+      .eq('id', payment.invoiceId)
+      .single();
+
+    if (invoiceData) {
+      // Subtract the payment amount
+      const newPaidAmount = Math.round(Math.max(0, ((invoiceData.paid_amount || 0) - payment.amount)) * 100) / 100;
+      const newRemainingAmount = Math.round((invoiceData.amount - newPaidAmount) * 100) / 100;
+      
+      let newStatus = 'pending';
+      if (newRemainingAmount <= 0.01) {
+        newStatus = 'paid';
+        const finalRemainingAmount = 0;
+        const finalPaidAmount = invoiceData.amount;
+        await supabase!
+          .from('invoices')
+          .update({
+            paid_amount: finalPaidAmount,
+            remaining_amount: finalRemainingAmount,
+            status: newStatus,
+          })
+          .eq('id', payment.invoiceId);
+      } else if (newPaidAmount > 0) {
+        newStatus = 'partial';
+        await supabase!
+          .from('invoices')
+          .update({
+            paid_amount: newPaidAmount,
+            remaining_amount: newRemainingAmount,
+            status: newStatus,
+          })
+          .eq('id', payment.invoiceId);
+      } else {
+        newStatus = 'pending';
+        await supabase!
+          .from('invoices')
+          .update({
+            paid_amount: newPaidAmount,
+            remaining_amount: newRemainingAmount,
+            status: newStatus,
+          })
+          .eq('id', payment.invoiceId);
+      }
+    }
+    
     return true;
   }
 
@@ -1229,6 +1360,15 @@ class SupabaseService {
             entityId = paymentResult.id;
           } else {
             return { success: false, message: 'Failed to create payment' };
+          }
+          break;
+          
+        case 'payment_delete':
+          const deleted = await this.deletePayment(request.request_data.paymentId, approverId, 'admin');
+          if (deleted === true) {
+            entityId = request.request_data.paymentId;
+          } else {
+            return { success: false, message: 'Failed to delete payment' };
           }
           break;
           

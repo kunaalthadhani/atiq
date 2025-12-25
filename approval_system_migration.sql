@@ -8,7 +8,7 @@
 -- Create approval_requests table
 CREATE TABLE IF NOT EXISTS approval_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_type TEXT NOT NULL CHECK (request_type IN ('contract_create', 'contract_terminate', 'contract_cancel', 'payment_create')),
+  request_type TEXT NOT NULL CHECK (request_type IN ('contract_create', 'contract_terminate', 'contract_cancel', 'payment_create', 'payment_delete')),
   requested_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   approved_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),

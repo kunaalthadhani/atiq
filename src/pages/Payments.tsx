@@ -151,7 +151,16 @@ export default function Payments() {
   const handleDelete = async (paymentId: string) => {
     if (confirm('Are you sure you want to delete this payment?')) {
       try {
-        await dataService.deletePayment(paymentId);
+        const result = await dataService.deletePayment(paymentId, user?.id, user?.role);
+        
+        if (typeof result === 'object' && 'requiresApproval' in result) {
+          alert(result.message || 'Payment deletion request submitted for approval');
+        } else if (result === true) {
+          // Payment deleted successfully
+        } else {
+          alert('Failed to delete payment. Please try again.');
+        }
+        
         await loadData();
       } catch (error) {
         console.error('Error deleting payment:', error);

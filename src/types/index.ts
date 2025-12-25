@@ -155,7 +155,7 @@ export interface DashboardStats {
 }
 
 // Approval system types
-export type ApprovalRequestType = 'contract_create' | 'contract_terminate' | 'contract_cancel' | 'payment_create';
+export type ApprovalRequestType = 'contract_create' | 'contract_terminate' | 'contract_cancel' | 'payment_create' | 'payment_delete';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalRequest {

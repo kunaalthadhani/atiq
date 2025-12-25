@@ -82,6 +82,7 @@ export default function Approvals() {
       case 'contract_cancel':
         return <FileText className="w-5 h-5" />;
       case 'payment_create':
+      case 'payment_delete':
         return <DollarSign className="w-5 h-5" />;
       default:
         return <AlertCircle className="w-5 h-5" />;
@@ -98,6 +99,8 @@ export default function Approvals() {
         return 'Cancel Contract';
       case 'payment_create':
         return 'Create Payment';
+      case 'payment_delete':
+        return 'Delete Payment';
       default:
         return type;
     }

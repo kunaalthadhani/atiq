@@ -48,6 +48,7 @@ export default function Contracts() {
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
   const [contractAttachments, setContractAttachments] = useState<string[]>([]);
+  const [yearlyRent, setYearlyRent] = useState<string>('');
 
   useEffect(() => {
     loadData();
@@ -165,6 +166,23 @@ export default function Contracts() {
     }
   }, [formStartDate, formEndDate, formFrequency]);
 
+  // Pre-fill form when editing contract
+  useEffect(() => {
+    if (editingContract) {
+      setSelectedTenantId(editingContract.tenantId);
+      setTenantSearch(`${editingContract.tenant.firstName} ${editingContract.tenant.lastName}`);
+      setSelectedPropertyId(editingContract.unit.propertyId);
+      setFormStartDate(editingContract.startDate.toISOString().split('T')[0]);
+      setFormEndDate(editingContract.endDate.toISOString().split('T')[0]);
+      setFormFrequency(editingContract.paymentFrequency);
+      setCalculatedInstallments(editingContract.numberOfInstallments);
+      setContractAttachments(editingContract.attachments || []);
+      setYearlyRent((editingContract.monthlyRent * 12).toString());
+    } else {
+      setYearlyRent('');
+    }
+  }, [editingContract]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
@@ -189,37 +207,89 @@ export default function Contracts() {
       notes: (formData.get('notes') as string) || undefined,
       contractNumber: formData.get('contractNumber') as string,
       dueDateDay: formData.get('dueDateDay') ? parseInt(formData.get('dueDateDay') as string) : undefined,
+      attachments: contractAttachments,
     };
 
     try {
-      const result = await dataService.createContract(
-        contractData,
-        user?.id,
-        user?.role
-      );
-      
-      if (result.success) {
-        if (result.requiresApproval) {
-          alert(result.message || 'Contract creation request submitted for approval');
+      if (editingContract) {
+        // Check if status is changing from draft to active
+        const isChangingToActive = contractData.status === 'active' && editingContract.status === 'draft';
+        
+        if (isChangingToActive && user?.role !== 'admin') {
+          // Create approval request for status change
+          try {
+            const { supabaseService } = await import('@/services/supabaseService');
+            const approvalRequest = await supabaseService.createApprovalRequest(
+              'contract_create',
+              'contract',
+              { ...contractData, id: editingContract.id, isUpdate: true },
+              user!.id
+            );
+            alert('Contract activation request submitted for approval');
+            await loadData();
+            setShowForm(false);
+            setEditingContract(null);
+            resetForm();
+            return;
+          } catch (error: any) {
+            console.error('Error creating approval request:', error);
+            setError(error.message || 'Failed to submit approval request');
+            return;
+          }
+        } else {
+          // Update contract directly
+          const updated = await dataService.updateContract(
+            editingContract.id,
+            contractData,
+            user?.id,
+            user?.role
+          );
+          if (updated) {
+            alert('Contract updated successfully');
+            await loadData();
+            setShowForm(false);
+            setEditingContract(null);
+            resetForm();
+          } else {
+            setError('Failed to update contract');
+          }
         }
-        await loadData();
-        setShowForm(false);
-        // Reset form state
-        setSelectedPropertyId('');
-        setTenantSearch('');
-        setSelectedTenantId('');
-        setFormStartDate('');
-        setFormEndDate('');
-        setFormFrequency('monthly');
-        setCalculatedInstallments(0);
-        setContractDuration('');
       } else {
-        setError(result.message || 'Failed to create contract');
+        // Create new contract (existing logic)
+        const result = await dataService.createContract(
+          contractData,
+          user?.id,
+          user?.role
+        );
+        
+        if (result.success) {
+          if (result.requiresApproval) {
+            alert(result.message || 'Contract creation request submitted for approval');
+          }
+          await loadData();
+          setShowForm(false);
+          resetForm();
+        } else {
+          setError(result.message || 'Failed to create contract');
+        }
       }
-    } catch (error) {
-      console.error('Error creating contract:', error);
-      setError('Failed to create contract. Please try again.');
+    } catch (error: any) {
+      console.error('Error saving contract:', error);
+      setError(error.message || 'Failed to save contract. Please try again.');
     }
+  };
+
+  const resetForm = () => {
+    setSelectedPropertyId('');
+    setTenantSearch('');
+    setSelectedTenantId('');
+    setFormStartDate('');
+    setFormEndDate('');
+    setFormFrequency('monthly');
+    setCalculatedInstallments(0);
+    setContractDuration('');
+    setContractAttachments([]);
+    setYearlyRent('');
   };
 
   const handleTerminate = async (id: string) => {
@@ -240,14 +310,8 @@ export default function Contracts() {
   const handleCancel = () => {
     setShowForm(false);
     setError('');
-    setSelectedPropertyId('');
-    setTenantSearch('');
-    setSelectedTenantId('');
-    setFormStartDate('');
-    setFormEndDate('');
-    setFormFrequency('monthly');
-    setCalculatedInstallments(0);
-    setContractDuration('');
+    setEditingContract(null);
+    resetForm();
   };
 
   const getAvailableProperties = () => {
@@ -506,7 +570,9 @@ export default function Contracts() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="flex-shrink-0 bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between rounded-t-xl">
-              <h2 className="text-xl font-bold text-gray-900">Create New Contract</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingContract ? 'Edit Contract' : 'Create New Contract'}
+              </h2>
               <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
@@ -630,6 +696,8 @@ export default function Contracts() {
                     required
                     min="0"
                     step="0.01"
+                    value={yearlyRent}
+                    onChange={(e) => setYearlyRent(e.target.value)}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>
@@ -748,15 +816,20 @@ export default function Contracts() {
                   </label>
                   <select
                     name="status"
-                    defaultValue="draft"
-                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                    defaultValue={editingContract?.status || 'draft'}
+                    disabled={editingContract?.status === 'active'}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
                   >
                     <option value="draft">Draft</option>
                     <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
-                    <option value="terminated">Terminated</option>
                     <option value="expired">Expired</option>
+                    <option value="terminated" disabled={!editingContract || editingContract.status !== 'active'}>
+                      Terminated
+                    </option>
                   </select>
+                  {editingContract?.status === 'active' && (
+                    <p className="text-xs text-gray-500 mt-1">Active contracts cannot be edited. Use Terminate button instead.</p>
+                  )}
                 </div>
 
                 <div>
@@ -916,6 +989,38 @@ export default function Contracts() {
                   <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">{viewingContract.notes}</p>
                 </div>
               )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                {viewingContract.status === 'draft' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingContract(viewingContract);
+                      setShowForm(true);
+                      setViewingContract(null);
+                    }}
+                    className="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Edit Contract
+                  </button>
+                )}
+                
+                {viewingContract.status === 'active' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingContract(null);
+                      handleTerminate(viewingContract.id);
+                    }}
+                    className="flex items-center px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Ban className="w-4 h-4 mr-2" />
+                    Terminate Contract
+                  </button>
+                )}
+              </div>
 
               {/* Attachments Section */}
               <div>
