@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: userData.id,
               email: userData.email,
               name: userData.name,
-              role: userData.role,
+              role: userData.role?.trim(), // Trim whitespace from role
             });
           }
         }
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: userData.id,
               email: userData.email,
               name: userData.name,
-              role: userData.role,
+              role: userData.role?.trim(), // Trim whitespace from role
             };
             setUser(userObj);
             return { success: true };
