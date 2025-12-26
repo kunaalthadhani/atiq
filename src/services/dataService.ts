@@ -46,7 +46,9 @@ class LocalStorageService {
     localStorage.setItem(this.getStorageKey(key), JSON.stringify(data));
   }
 
-  async getProperties(userRole?: string): Promise<Property[]> {
+  async getProperties(userRole?: string, userId?: string): Promise<Property[]> {
+    const _unused = { userRole, userId };
+    void _unused;
     return this.loadFromStorage<Property>('properties');
   }
 

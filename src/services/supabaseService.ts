@@ -276,16 +276,42 @@ class SupabaseService {
   // ============================================
   // PROPERTIES
   // ============================================
-  async getProperties(userRole?: string): Promise<Property[]> {
+  async getProperties(userRole?: string, userId?: string): Promise<Property[]> {
     if (!this.checkSupabase()) return [];
+    
+    let pendingPropertyIds: string[] = [];
+    if (userRole !== 'admin' && userId) {
+      try {
+        const { data: approvalRequests } = await supabase!
+          .from('approval_requests')
+          .select('entity_id, request_data')
+          .eq('request_type', 'property_create')
+          .eq('entity_type', 'property')
+          .eq('requested_by', userId)
+          .eq('status', 'pending');
 
+        if (approvalRequests) {
+          pendingPropertyIds = approvalRequests
+            .map(req => req.entity_id || req.request_data?.propertyId)
+            .filter((id): id is string => !!id);
+        }
+      } catch (error) {
+        console.error('Error fetching pending property approval requests:', error);
+      }
+    }
+    
     let query = supabase!
       .from('properties')
       .select('*');
     
-    // Non-admin users only see approved properties (or properties with null approval_status for backward compatibility)
+    // Non-admin users see approved properties and their own pending properties
     if (userRole !== 'admin') {
-      query = query.or('approval_status.is.null,approval_status.eq.approved');
+      if (pendingPropertyIds.length > 0) {
+        const idFilter = pendingPropertyIds.map(id => `'${id}'`).join(',');
+        query = query.or(`approval_status.is.null,approval_status.eq.approved,and(approval_status.eq.pending,id.in.(${idFilter}))`);
+      } else {
+        query = query.or('approval_status.is.null,approval_status.eq.approved');
+      }
     }
     
     const { data, error } = await query.order('created_at', { ascending: false });

@@ -31,8 +31,8 @@ export default function Properties() {
   const loadProperties = async () => {
     try {
       const [propertiesData, unitsData] = await Promise.all([
-        dataService.getProperties(user?.role),
-        dataService.getUnits(undefined, user?.role)
+        dataService.getProperties(user?.role, user?.id),
+        dataService.getUnits(undefined, user?.role, user?.id)
       ]);
       setProperties(propertiesData);
       setUnits(unitsData);
