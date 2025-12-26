@@ -166,18 +166,19 @@ const toUnitRow = (unit: Omit<Unit, 'id' | 'createdAt'> & { approval_status?: st
   return row;
 };
 
-const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_status?: string }) => {
+const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_status?: string; idExpiryDate?: Date | string }) => {
   // Handle idExpiryDate as either Date object or string (from JSONB)
   let idExpiryDateStr: string | null = null;
   if (tenant.idExpiryDate) {
-    if (tenant.idExpiryDate instanceof Date) {
-      idExpiryDateStr = tenant.idExpiryDate.toISOString().split('T')[0];
-    } else if (typeof tenant.idExpiryDate === 'string') {
+    const idExpiryDate = tenant.idExpiryDate as Date | string;
+    if (idExpiryDate instanceof Date) {
+      idExpiryDateStr = idExpiryDate.toISOString().split('T')[0];
+    } else if (typeof idExpiryDate === 'string') {
       // If it's already a string, use it directly or convert if needed
-      idExpiryDateStr = tenant.idExpiryDate.split('T')[0];
+      idExpiryDateStr = idExpiryDate.split('T')[0];
     } else {
       // Fallback: try to create Date from the value
-      idExpiryDateStr = new Date(tenant.idExpiryDate as any).toISOString().split('T')[0];
+      idExpiryDateStr = new Date(idExpiryDate as any).toISOString().split('T')[0];
     }
   }
   
@@ -767,14 +768,15 @@ class SupabaseService {
     if (updates.idNumber !== undefined) updateData.id_number = updates.idNumber;
     if (updates.idExpiryDate !== undefined) {
       // Handle idExpiryDate as either Date object or string (from JSONB)
-      if (updates.idExpiryDate instanceof Date) {
-        updateData.id_expiry_date = updates.idExpiryDate.toISOString().split('T')[0];
-      } else if (typeof updates.idExpiryDate === 'string') {
+      const idExpiryDate = updates.idExpiryDate as Date | string | null | undefined;
+      if (idExpiryDate instanceof Date) {
+        updateData.id_expiry_date = idExpiryDate.toISOString().split('T')[0];
+      } else if (typeof idExpiryDate === 'string') {
         // If it's already a string, use it directly or convert if needed
-        updateData.id_expiry_date = updates.idExpiryDate.split('T')[0];
-      } else if (updates.idExpiryDate) {
+        updateData.id_expiry_date = idExpiryDate.split('T')[0];
+      } else if (idExpiryDate) {
         // Fallback: try to create Date from the value
-        updateData.id_expiry_date = new Date(updates.idExpiryDate as any).toISOString().split('T')[0];
+        updateData.id_expiry_date = new Date(idExpiryDate as any).toISOString().split('T')[0];
       } else {
         updateData.id_expiry_date = null;
       }
