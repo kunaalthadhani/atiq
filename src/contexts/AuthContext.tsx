@@ -39,18 +39,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single();
           
           if (userData && !error) {
+            // Trim role to remove any whitespace
+            const trimmedRole = userData.role?.trim() || userData.role;
+            
             console.log('=== USER DATA LOADED ===');
             console.log('User data from database:', userData);
-            console.log('Role value:', userData.role);
-            console.log('Role type:', typeof userData.role);
-            console.log('Is admin?', userData.role === 'admin');
+            console.log('Role value (raw):', JSON.stringify(userData.role));
+            console.log('Role value (trimmed):', JSON.stringify(trimmedRole));
+            console.log('Role type:', typeof trimmedRole);
+            console.log('Is admin?', trimmedRole === 'admin');
             console.log('========================');
             
             setUser({
               id: userData.id,
               email: userData.email,
               name: userData.name,
-              role: userData.role?.trim(), // Trim whitespace from role
+              role: trimmedRole,
             });
           }
         }
@@ -111,11 +115,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (userData) {
+            // Trim role to remove any whitespace
+            const trimmedRole = userData.role?.trim() || userData.role;
+            
             const userObj = {
               id: userData.id,
               email: userData.email,
               name: userData.name,
-              role: userData.role?.trim(), // Trim whitespace from role
+              role: trimmedRole,
             };
             setUser(userObj);
             return { success: true };

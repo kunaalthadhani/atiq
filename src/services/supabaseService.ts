@@ -1279,13 +1279,14 @@ class SupabaseService {
   ): Promise<ApprovalRequestWithDetails[]> {
     if (!this.checkSupabase()) return [];
     
+    console.log('=== FETCHING APPROVAL REQUESTS ===');
+    console.log('Status filter:', status);
+    console.log('User ID filter:', userId);
+    
+    // First, try a simple query without joins to see if RLS is the issue
     let query = supabase!
       .from('approval_requests')
-      .select(`
-        *,
-        requester:users!approval_requests_requested_by_fkey(id, name, email),
-        approver:users!approval_requests_approved_by_fkey(id, name, email)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
     
     if (status) {
@@ -1298,16 +1299,43 @@ class SupabaseService {
     
     const { data, error } = await query;
     
+    console.log('Query result - data:', data);
+    console.log('Query result - error:', error);
     if (error) {
       console.error('Error fetching approval requests:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+    }
+    console.log('Number of requests found:', data?.length || 0);
+    console.log('===================================');
+    
+    if (error) {
       return [];
     }
     
-    return data.map((row: any) => ({
-      ...mapApprovalRequest(row),
-      requesterName: row.requester?.name,
-      approverName: row.approver?.name,
-    }));
+    // If we got data, now try to get user names separately
+    if (data && data.length > 0) {
+      const userIds = new Set<string>();
+      data.forEach((row: any) => {
+        if (row.requested_by) userIds.add(row.requested_by);
+        if (row.approved_by) userIds.add(row.approved_by);
+      });
+      
+      // Fetch user names
+      const { data: usersData } = await supabase!
+        .from('users')
+        .select('id, name, email')
+        .in('id', Array.from(userIds));
+      
+      const usersMap = new Map((usersData || []).map((u: any) => [u.id, u]));
+      
+      return data.map((row: any) => ({
+        ...mapApprovalRequest(row),
+        requesterName: usersMap.get(row.requested_by)?.name,
+        approverName: usersMap.get(row.approved_by)?.name,
+      }));
+    }
+    
+    return [];
   }
 
   async approveRequest(

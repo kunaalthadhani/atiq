@@ -21,10 +21,19 @@ export default function Approvals() {
 
   const loadRequests = async () => {
     try {
+      console.log('=== APPROVALS PAGE: Loading requests ===');
+      console.log('Current filter:', filter);
+      console.log('User role:', user?.role);
+      
       const data = await dataService.getApprovalRequests(
         filter === 'all' ? undefined : filter,
         undefined
       );
+      
+      console.log('Approvals page - received data:', data);
+      console.log('Number of requests:', data.length);
+      console.log('========================================');
+      
       setRequests(data);
     } catch (error) {
       console.error('Error loading approval requests:', error);
