@@ -11,6 +11,7 @@ export default function Tenants() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [loadingTenants, setLoadingTenants] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -63,16 +64,24 @@ export default function Tenants() {
   };
 
   // Note: searchTenants needs to be implemented in supabaseService or filter client-side
-  const filteredTenants = searchQuery
-    ? tenants.filter(t => 
-        `${t.firstName} ${t.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.phone.includes(searchQuery) ||
-        t.secondaryPhone?.includes(searchQuery) ||
-        t.whatsappNumber?.includes(searchQuery) ||
-        t.secondaryWhatsappNumber?.includes(searchQuery)
-      )
-    : tenants;
+  const filteredTenants = tenants.filter(t => {
+    // Search filter
+    const matchesSearch = !searchQuery || 
+      `${t.firstName} ${t.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.phone.includes(searchQuery) ||
+      t.secondaryPhone?.includes(searchQuery) ||
+      t.whatsappNumber?.includes(searchQuery) ||
+      t.secondaryWhatsappNumber?.includes(searchQuery);
+    
+    // Approval status filter
+    const matchesApproval = approvalFilter === 'all' || 
+      (approvalFilter === 'pending' && t.approvalStatus === 'pending') ||
+      (approvalFilter === 'approved' && (t.approvalStatus === 'approved' || !t.approvalStatus)) ||
+      (approvalFilter === 'rejected' && t.approvalStatus === 'rejected');
+    
+    return matchesSearch && matchesApproval;
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -236,9 +245,9 @@ export default function Tenants() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="mb-5">
-        <div className="relative">
+      {/* Search and Filter */}
+      <div className="mb-5 flex gap-3">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
@@ -248,6 +257,16 @@ export default function Tenants() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
         </div>
+        <select
+          value={approvalFilter}
+          onChange={(e) => setApprovalFilter(e.target.value as 'all' | 'pending' | 'approved' | 'rejected')}
+          className="px-4 py-2.5 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+        >
+          <option value="all">All Approval Status</option>
+          <option value="pending">Pending Approval</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
       </div>
 
       {/* Tenants Grid */}
