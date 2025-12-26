@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Building2, Lock, Key, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -9,7 +9,6 @@ export default function ResetPassword() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   useEffect(() => {

@@ -228,7 +228,7 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     // Parameters required for interface compatibility with supabaseService
-    _userId; _userRole; // Reference to satisfy TypeScript noUnusedParameters
+    void _userId; void _userRole;
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return false;
@@ -263,7 +263,7 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<Contract | null> {
     // Parameters required for interface compatibility with supabaseService
-    _userId; _userRole; // Reference to satisfy TypeScript noUnusedParameters
+    void _userId; void _userRole;
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return null;
@@ -289,7 +289,7 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     // Parameters required for interface compatibility with supabaseService
-    _userId; _userRole; // Reference to satisfy TypeScript noUnusedParameters
+    void _userId; void _userRole;
     const payments = this.loadFromStorage<Payment>('payments');
     const newPayment: Payment = {
       ...payment,
@@ -485,7 +485,7 @@ class LocalStorageService {
     _userId?: string
   ): Promise<ApprovalRequestWithDetails[]> {
     // Parameters required for interface compatibility with supabaseService
-    _status; _userId; // Reference to satisfy TypeScript noUnusedParameters
+    void _status; void _userId;
     // Approval system requires Supabase
     return [];
   }
@@ -495,7 +495,7 @@ class LocalStorageService {
     _approverId: string
   ): Promise<{ success: boolean; message?: string }> {
     // Parameters required for interface compatibility with supabaseService
-    _requestId; _approverId; // Reference to satisfy TypeScript noUnusedParameters
+    void _requestId; void _approverId;
     return { success: false, message: 'Approval system requires Supabase' };
   }
 
@@ -505,7 +505,7 @@ class LocalStorageService {
     _reason: string
   ): Promise<{ success: boolean; message?: string }> {
     // Parameters required for interface compatibility with supabaseService
-    _requestId; _approverId; _reason; // Reference to satisfy TypeScript noUnusedParameters
+    void _requestId; void _approverId; void _reason;
     return { success: false, message: 'Approval system requires Supabase' };
   }
 }
