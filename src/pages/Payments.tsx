@@ -136,9 +136,9 @@ export default function Payments() {
       setShowForm(false);
       setSelectedInvoiceId('');
       setInvoiceSearch('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating payment:', error);
-      alert('Failed to create payment. Please try again.');
+      alert(error?.message || 'Failed to create payment. Please try again.');
     }
   };
 

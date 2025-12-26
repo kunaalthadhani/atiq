@@ -826,20 +826,21 @@ class SupabaseService {
     let intervalMonths = 1;
     let amountPerInstallment = contract.monthlyRent;
     
-    if (contract.paymentFrequency === 'monthly') {
-      intervalMonths = 1;
-      amountPerInstallment = contract.monthlyRent;
-    } else if (contract.paymentFrequency === '1_payment') {
-      intervalMonths = totalMonths;
+    // 1 Payment = annually (12 months)
+    // 2 Payments = semi-annually (6 months each)
+    // 3 Payments = every 4 months
+    // 4 Payments = quarterly (3 months each)
+    if (contract.paymentFrequency === '1_payment') {
+      intervalMonths = 12; // Annually
       amountPerInstallment = totalContractValue;
     } else if (contract.paymentFrequency === '2_payment') {
-      intervalMonths = Math.floor(totalMonths / 2);
+      intervalMonths = 6; // Semi-annually
       amountPerInstallment = totalContractValue / 2;
     } else if (contract.paymentFrequency === '3_payment') {
-      intervalMonths = Math.floor(totalMonths / 3);
+      intervalMonths = 4; // Every 4 months
       amountPerInstallment = totalContractValue / 3;
     } else if (contract.paymentFrequency === '4_payment') {
-      intervalMonths = Math.floor(totalMonths / 4);
+      intervalMonths = 3; // Quarterly
       amountPerInstallment = totalContractValue / 4;
     }
 
@@ -1079,6 +1080,44 @@ class SupabaseService {
     userRole?: string
   ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Get the invoice to check installment number and contract
+    const { data: currentInvoice, error: invoiceError } = await supabase!
+      .from('invoices')
+      .select('id, contract_id, installment_number, paid_amount, remaining_amount, amount, status')
+      .eq('id', payment.invoiceId)
+      .single();
+    
+    if (invoiceError || !currentInvoice) {
+      throw new Error('Invoice not found');
+    }
+    
+    // Check if previous installments are fully paid
+    const { data: contractInvoices, error: invoicesError } = await supabase!
+      .from('invoices')
+      .select('id, installment_number, status, remaining_amount')
+      .eq('contract_id', currentInvoice.contract_id)
+      .order('installment_number', { ascending: true });
+    
+    if (invoicesError) {
+      console.error('Error fetching contract invoices:', invoicesError);
+    } else if (contractInvoices) {
+      // Check if any previous installment (lower number) is not fully paid
+      const previousInvoices = contractInvoices.filter(
+        (inv: any) => inv.installment_number < currentInvoice.installment_number
+      );
+      
+      const unpaidPrevious = previousInvoices.find(
+        (inv: any) => inv.status !== 'paid' || (inv.remaining_amount && inv.remaining_amount > 0.01)
+      );
+      
+      if (unpaidPrevious) {
+        throw new Error(
+          `Cannot create payment for installment ${currentInvoice.installment_number}. ` +
+          `Installment ${unpaidPrevious.installment_number} must be fully paid first.`
+        );
+      }
+    }
     
     // If user is not admin, create approval request instead
     if (userRole !== 'admin' && userId) {
@@ -1418,6 +1457,9 @@ class SupabaseService {
               ? request.request_data.paymentDate 
               : new Date(request.request_data.paymentDate)
           };
+          
+          // Validation is already done in createPayment, but we call it with admin role
+          // so it will bypass approval but still check installment order
           const paymentResult = await this.createPayment(paymentData, approverId, 'admin');
           if ('id' in paymentResult) {
             entityId = paymentResult.id;

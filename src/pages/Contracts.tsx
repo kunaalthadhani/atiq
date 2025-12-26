@@ -3,22 +3,20 @@ import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, Che
 import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
-import { differenceInMonths, addYears, subDays } from 'date-fns';
+import { addYears, subDays } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Helper function to format payment frequency for display
 const formatPaymentFrequency = (frequency: string): string => {
   switch (frequency) {
-    case 'monthly':
-      return 'Monthly';
     case '1_payment':
-      return '1 payment';
+      return '1 Payment';
     case '2_payment':
-      return '2 payment';
+      return '2 Payments';
     case '3_payment':
-      return '3 payment';
+      return '3 Payments';
     case '4_payment':
-      return '4 payment';
+      return '4 Payments';
     default:
       return frequency;
   }
@@ -144,13 +142,7 @@ export default function Contracts() {
   // Calculate installments based on dates and frequency
   useEffect(() => {
     if (formStartDate && formEndDate && formFrequency) {
-      if (formFrequency === 'monthly') {
-        const start = new Date(formStartDate);
-        const end = new Date(formEndDate);
-        const totalMonths = differenceInMonths(end, start);
-        const installments = Math.max(1, totalMonths);
-        setCalculatedInstallments(installments);
-      } else if (formFrequency === '1_payment') {
+      if (formFrequency === '1_payment') {
         setCalculatedInstallments(1);
       } else if (formFrequency === '2_payment') {
         setCalculatedInstallments(2);
@@ -772,11 +764,10 @@ export default function Contracts() {
                     onChange={(e) => setFormFrequency(e.target.value)}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
                   >
-                    <option value="monthly">Monthly</option>
-                    <option value="1_payment">1 payment</option>
-                    <option value="2_payment">2 payment</option>
-                    <option value="3_payment">3 payment</option>
-                    <option value="4_payment">4 payment</option>
+                    <option value="1_payment">1 Payment</option>
+                    <option value="2_payment">2 Payments</option>
+                    <option value="3_payment">3 Payments</option>
+                    <option value="4_payment">4 Payments</option>
                   </select>
                 </div>
 
