@@ -167,6 +167,20 @@ const toUnitRow = (unit: Omit<Unit, 'id' | 'createdAt'> & { approval_status?: st
 };
 
 const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_status?: string }) => {
+  // Handle idExpiryDate as either Date object or string (from JSONB)
+  let idExpiryDateStr: string | null = null;
+  if (tenant.idExpiryDate) {
+    if (tenant.idExpiryDate instanceof Date) {
+      idExpiryDateStr = tenant.idExpiryDate.toISOString().split('T')[0];
+    } else if (typeof tenant.idExpiryDate === 'string') {
+      // If it's already a string, use it directly or convert if needed
+      idExpiryDateStr = tenant.idExpiryDate.split('T')[0];
+    } else {
+      // Fallback: try to create Date from the value
+      idExpiryDateStr = new Date(tenant.idExpiryDate as any).toISOString().split('T')[0];
+    }
+  }
+  
   const row: any = {
     first_name: tenant.firstName,
     last_name: tenant.lastName,
@@ -180,7 +194,7 @@ const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_statu
     emergency_phone: tenant.emergencyPhone,
     id_type: tenant.idType,
     id_number: tenant.idNumber,
-    id_expiry_date: tenant.idExpiryDate?.toISOString().split('T')[0],
+    id_expiry_date: idExpiryDateStr,
     billing_address: tenant.billingAddress,
     payment_method: tenant.paymentMethod,
     notification_preference: tenant.notificationPreference,
@@ -751,7 +765,20 @@ class SupabaseService {
     if (updates.emergencyPhone !== undefined) updateData.emergency_phone = updates.emergencyPhone;
     if (updates.idType !== undefined) updateData.id_type = updates.idType;
     if (updates.idNumber !== undefined) updateData.id_number = updates.idNumber;
-    if (updates.idExpiryDate !== undefined) updateData.id_expiry_date = updates.idExpiryDate?.toISOString().split('T')[0];
+    if (updates.idExpiryDate !== undefined) {
+      // Handle idExpiryDate as either Date object or string (from JSONB)
+      if (updates.idExpiryDate instanceof Date) {
+        updateData.id_expiry_date = updates.idExpiryDate.toISOString().split('T')[0];
+      } else if (typeof updates.idExpiryDate === 'string') {
+        // If it's already a string, use it directly or convert if needed
+        updateData.id_expiry_date = updates.idExpiryDate.split('T')[0];
+      } else if (updates.idExpiryDate) {
+        // Fallback: try to create Date from the value
+        updateData.id_expiry_date = new Date(updates.idExpiryDate as any).toISOString().split('T')[0];
+      } else {
+        updateData.id_expiry_date = null;
+      }
+    }
     if (updates.billingAddress !== undefined) updateData.billing_address = updates.billingAddress;
     if (updates.paymentMethod !== undefined) updateData.payment_method = updates.paymentMethod;
     if (updates.notificationPreference !== undefined) updateData.notification_preference = updates.notificationPreference;
