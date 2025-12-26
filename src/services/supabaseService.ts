@@ -536,31 +536,139 @@ class SupabaseService {
   // ============================================
   // TENANTS
   // ============================================
-  async getTenants(range: { from: number; to: number } = { from: 0, to: 199 }, userRole?: string): Promise<Tenant[]> {
+  async getTenants(range: { from: number; to: number } = { from: 0, to: 199 }, userRole?: string, userId?: string): Promise<Tenant[]> {
     if (!this.checkSupabase()) return [];
+    
+    // For non-admin users, also get their own pending tenants
+    let pendingTenantIds: string[] = [];
+    if (userRole !== 'admin' && userId) {
+      try {
+        // Find pending approval requests for tenant_create created by this user
+        const { data: approvalRequests } = await supabase!
+          .from('approval_requests')
+          .select('entity_id, request_data')
+          .eq('request_type', 'tenant_create')
+          .eq('entity_type', 'tenant')
+          .eq('requested_by', userId)
+          .eq('status', 'pending');
+        
+        if (approvalRequests && approvalRequests.length > 0) {
+          // Extract tenant IDs from entity_id or request_data.tenantId
+          for (const req of approvalRequests) {
+            if (req.entity_id) {
+              pendingTenantIds.push(req.entity_id);
+            } else if (req.request_data?.tenantId) {
+              pendingTenantIds.push(req.request_data.tenantId);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching pending tenant approval requests:', error);
+      }
+    }
+    
+    // Non-admin users see approved tenants OR their own pending tenants
+    if (userRole !== 'admin') {
+      if (pendingTenantIds.length > 0) {
+        // Fetch approved tenants and pending tenants separately, then combine
+        // First, get approved tenants
+        const approvedQuery = supabase!
+          .from('tenants')
+          .select(`
+            id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+            national_id, emergency_contact, emergency_phone, created_at,
+            id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes, approval_status
+          `)
+          .or('approval_status.is.null,approval_status.eq.approved')
+          .order('created_at', { ascending: false })
+          .range(range.from, range.to);
+        
+        // Then get pending tenants created by this user
+        const pendingQuery = supabase!
+          .from('tenants')
+          .select(`
+            id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+            national_id, emergency_contact, emergency_phone, created_at,
+            id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes, approval_status
+          `)
+          .eq('approval_status', 'pending')
+          .in('id', pendingTenantIds)
+          .order('created_at', { ascending: false });
+        
+        const [approvedResult, pendingResult] = await Promise.all([
+          approvedQuery,
+          pendingQuery
+        ]);
+        
+        if (approvedResult.error) {
+          console.error('Error fetching approved tenants:', approvedResult.error);
+          return [];
+        }
+        if (pendingResult.error) {
+          console.error('Error fetching pending tenants:', pendingResult.error);
+          return approvedResult.data ? approvedResult.data.map(mapTenant) : [];
+        }
+        
+        // Combine and deduplicate
+        const allTenants = [
+          ...(approvedResult.data || []),
+          ...(pendingResult.data || [])
+        ];
+        
+        // Remove duplicates based on id
+        const uniqueTenants = Array.from(
+          new Map(allTenants.map(t => [t.id, t])).values()
+        );
+        
+        // Sort by created_at descending
+        uniqueTenants.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        return uniqueTenants.map(mapTenant);
+      } else {
+        // Only show approved tenants
+        let query = supabase!
+          .from('tenants')
+          .select(`
+            id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
+            national_id, emergency_contact, emergency_phone, created_at,
+            id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes, approval_status
+          `)
+          .or('approval_status.is.null,approval_status.eq.approved')
+          .order('created_at', { ascending: false })
+          .range(range.from, range.to);
+        
+        const { data, error } = await query;
+        
+        if (error) {
+          console.error('Error fetching tenants:', error);
+          return [];
+        }
+        
+        return data ? data.map(mapTenant) : [];
+      }
+    }
+    
+    // Admin sees all tenants
     let query = supabase!
       .from('tenants')
       .select(`
         id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
         national_id, emergency_contact, emergency_phone, created_at,
         id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes, approval_status
-      `);
-    
-    // Non-admin users only see approved tenants (or tenants with null approval_status for backward compatibility)
-    if (userRole !== 'admin') {
-      query = query.or('approval_status.is.null,approval_status.eq.approved');
-    }
-    
-    const { data, error } = await query
+      `)
       .order('created_at', { ascending: false })
       .range(range.from, range.to);
+    
+    const { data, error } = await query;
     
     if (error) {
       console.error('Error fetching tenants:', error);
       return [];
     }
     
-    return data.map(mapTenant);
+    return data ? data.map(mapTenant) : [];
   }
 
   async getTenantById(id: string): Promise<Tenant | null> {
@@ -586,30 +694,14 @@ class SupabaseService {
   ): Promise<Tenant | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
     
-    // If user is not admin, create approval request instead
-    if (userRole !== 'admin' && userId) {
-      try {
-        const approvalRequest = await this.createApprovalRequest(
-          'tenant_create',
-          'tenant',
-          tenant,
-          userId
-        );
-        return {
-          requiresApproval: true,
-          approvalRequestId: approvalRequest.id,
-          message: 'Tenant creation request submitted for approval'
-        };
-      } catch (error: any) {
-        console.error('Error creating approval request:', error);
-        throw error;
-      }
-    }
+    // Always create the tenant, but set approval_status based on user role
+    const tenantRow = toTenantRow(tenant);
+    const approvalStatus = userRole === 'admin' ? 'approved' : 'pending';
+    tenantRow.approval_status = approvalStatus;
     
-    // Admin can create directly
     const { data, error } = await supabase!
       .from('tenants')
-      .insert(toTenantRow(tenant))
+      .insert(tenantRow)
       .select()
       .single();
     
@@ -618,7 +710,31 @@ class SupabaseService {
       throw error;
     }
     
-    return mapTenant(data);
+    const createdTenant = mapTenant(data);
+    
+    // If user is not admin, create approval request
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'tenant_create',
+          'tenant',
+          { tenantId: createdTenant.id, ...tenant }, // Include tenantId in request data
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Tenant created and submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        // Tenant is already created, so we still return it
+        return createdTenant;
+      }
+    }
+    
+    // Admin can see tenant immediately
+    return createdTenant;
   }
 
   async updateTenant(id: string, updates: Partial<Omit<Tenant, 'id' | 'createdAt'>>): Promise<Tenant | null> {

@@ -26,7 +26,7 @@ export default function Tenants() {
     // Phase 1: load tenants first to render quickly
     setLoadingTenants(true);
     try {
-      const tenantsData = await dataService.getTenants();
+      const tenantsData = await dataService.getTenants({ from: 0, to: 199 }, user?.role, user?.id);
       setTenants(tenantsData);
       setLoadingTenants(false);
     } catch (error) {
@@ -55,7 +55,7 @@ export default function Tenants() {
 
   const loadTenants = async () => {
     try {
-      const data = await dataService.getTenants({ from: 0, to: 199 }, user?.role);
+      const data = await dataService.getTenants({ from: 0, to: 199 }, user?.role, user?.id);
       setTenants(data);
     } catch (error) {
       console.error('Error loading tenants:', error);

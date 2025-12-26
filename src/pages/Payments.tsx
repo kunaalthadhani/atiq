@@ -357,19 +357,58 @@ Unit: ${invoice.unit.unitNumber}`;
         </div>
 
         {/* Rows */}
-        {filteredPayments.length > 0 ? (
-          filteredPayments.map((payment) => {
+        {(() => {
+          // Combine actual payments with pending payment approvals
+          const allPayments: Array<{ type: 'payment' | 'pending'; data: Payment | ApprovalRequestWithDetails; invoice?: InvoiceWithDetails }> = [];
+          
+          // Add actual payments
+          filteredPayments.forEach(payment => {
             const invoice = getInvoiceDetails(payment.invoiceId);
+            if (invoice) {
+              allPayments.push({ type: 'payment', data: payment, invoice });
+            }
+          });
+          
+          // Add pending payment approvals for current user
+          if (user && user.role?.trim() !== 'admin') {
+            getUserPendingPaymentRequests().forEach(approval => {
+              const invoice = invoices.find(inv => inv.id === approval.requestData?.invoiceId);
+              if (invoice) {
+                allPayments.push({ type: 'pending', data: approval, invoice });
+              }
+            });
+          }
+          
+          // Sort by date (newest first)
+          allPayments.sort((a, b) => {
+            const dateA = a.type === 'payment' 
+              ? new Date((a.data as Payment).paymentDate).getTime()
+              : new Date((a.data as ApprovalRequestWithDetails).requestData?.paymentDate || a.data.createdAt).getTime();
+            const dateB = b.type === 'payment'
+              ? new Date((b.data as Payment).paymentDate).getTime()
+              : new Date((b.data as ApprovalRequestWithDetails).requestData?.paymentDate || b.data.createdAt).getTime();
+            return dateB - dateA;
+          });
+          
+          return allPayments.length > 0 ? allPayments.map((item, index) => {
+            const { type, data, invoice } = item;
             if (!invoice) return null;
-
+            
+            const isPending = type === 'pending';
+            const payment = isPending ? null : (data as Payment);
+            const approval = isPending ? (data as ApprovalRequestWithDetails) : null;
+            const paymentData = isPending ? approval?.requestData : payment;
+            
             return (
               <div
-                key={payment.id}
-                className="grid grid-cols-[1.2fr_1.5fr_2fr_1.2fr_1fr_1.2fr_auto] gap-4 px-4 py-3 text-sm items-center border-b border-gray-100 hover:bg-gray-50"
+                key={isPending ? approval!.id : payment!.id}
+                className={`grid grid-cols-[1.2fr_1.5fr_2fr_1.2fr_1fr_1.2fr_auto] gap-4 px-4 py-3 text-sm items-center border-b border-gray-100 hover:bg-gray-50 ${isPending ? 'opacity-75 bg-yellow-50' : ''}`}
               >
                 {/* Date */}
                 <div>
-                  <div className="font-medium text-gray-900">{formatDate(payment.paymentDate)}</div>
+                  <div className="font-medium text-gray-900">
+                    {formatDate(paymentData?.paymentDate ? new Date(paymentData.paymentDate) : new Date())}
+                  </div>
                 </div>
 
                 {/* Tenants */}
@@ -389,70 +428,82 @@ Unit: ${invoice.unit.unitNumber}`;
 
                 {/* Amount */}
                 <div>
-                  <div className="font-medium text-success-600">{formatCurrency(payment.amount)}</div>
+                  <div className="font-medium text-success-600">{formatCurrency(paymentData?.amount || 0)}</div>
                 </div>
 
                 {/* Method */}
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                    {payment.paymentMethod.replace('_', ' ')}
+                    {paymentData?.paymentMethod?.replace('_', ' ') || '-'}
                   </span>
+                  {isPending && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Pending
+                    </span>
+                  )}
                 </div>
 
                 {/* Reference */}
                 <div>
-                  <div className="text-gray-600">{payment.referenceNumber || '-'}</div>
+                  <div className="text-gray-600">{paymentData?.referenceNumber || '-'}</div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-2">
-                  <div className="relative" ref={shareDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShareDropdownOpen(shareDropdownOpen === payment.id ? null : payment.id)}
-                      className="hover:text-gray-900"
-                      title="Share payment confirmation"
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </button>
-                    {shareDropdownOpen === payment.id && (
-                      <div 
-                        className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-10"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                  {isPending ? (
+                    <span className="text-xs text-gray-500 italic">Awaiting Approval</span>
+                  ) : (
+                    <>
+                      <div className="relative" ref={shareDropdownRef}>
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShareWhatsApp(payment);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          onClick={() => setShareDropdownOpen(shareDropdownOpen === payment!.id ? null : payment!.id)}
+                          className="hover:text-gray-900"
+                          title="Share payment confirmation"
                         >
-                          <MessageSquare className="w-4 h-4 text-success-600" />
-                          WhatsApp
+                          <Share2 className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShareEmail(payment);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                        >
-                          <Mail className="w-4 h-4 text-primary-600" />
-                          Email
-                        </button>
+                        {shareDropdownOpen === payment!.id && (
+                          <div 
+                            className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleShareWhatsApp(payment!);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <MessageSquare className="w-4 h-4 text-success-600" />
+                              WhatsApp
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleShareEmail(payment!);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Mail className="w-4 h-4 text-primary-600" />
+                              Email
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(payment.id)}
-                    className="hover:text-danger-600"
-                    title="Delete payment"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(payment!.id)}
+                        className="hover:text-danger-600"
+                        title="Delete payment"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

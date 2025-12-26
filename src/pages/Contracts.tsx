@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban, Paperclip, Trash2 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
-import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails } from '@/types';
+import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails, ApprovalRequestWithDetails } from '@/types';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
 import { addYears, subDays } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,10 +47,11 @@ export default function Contracts() {
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
   const [contractAttachments, setContractAttachments] = useState<string[]>([]);
   const [yearlyRent, setYearlyRent] = useState<string>('');
+  const [pendingContractApprovals, setPendingContractApprovals] = useState<ApprovalRequestWithDetails[]>([]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   // Reset to first page when search or filter changes
   useEffect(() => {
@@ -72,6 +73,19 @@ export default function Contracts() {
       setUnits(unitsData);
       setProperties(propertiesData);
       setInvoices(invoicesData);
+      
+      // Load pending contract approval requests for non-admin users
+      if (user && user.role?.trim() !== 'admin') {
+        try {
+          const approvalRequests = await dataService.getApprovalRequests('pending', user.id);
+          const contractApprovals = approvalRequests.filter(
+            req => req.requestType === 'contract_create' && req.status === 'pending'
+          );
+          setPendingContractApprovals(contractApprovals);
+        } catch (error) {
+          console.error('Error loading contract approval requests:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading contracts data:', error);
       setError('Failed to load contracts. Please refresh the page.');
@@ -397,6 +411,75 @@ export default function Contracts() {
           <option value="terminated">Terminated</option>
         </select>
       </div>
+
+      {/* Pending Contract Approvals Section (for non-admin users) */}
+      {user && user.role?.trim() !== 'admin' && pendingContractApprovals.length > 0 && (
+        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-5 h-5 text-yellow-600" />
+            <h3 className="font-semibold text-yellow-900">Pending Contract Approvals</h3>
+          </div>
+          <div className="space-y-3">
+            {pendingContractApprovals.map((approval) => {
+              const contractData = approval.requestData;
+              const tenant = tenants.find(t => t.id === contractData.tenantId);
+              const unit = units.find(u => u.id === contractData.unitId);
+              const property = properties.find(p => unit && p.id === unit.propertyId);
+              
+              if (!tenant || !unit || !property) return null;
+              
+              return (
+                <div key={approval.id} className="bg-white rounded-lg border border-yellow-200 p-4 hover:shadow-md transition-shadow opacity-75">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center mb-3">
+                        <div className="w-10 h-10 bg-green-50 border border-green-200 rounded-full flex items-center justify-center text-green-700 font-bold text-base mr-3">
+                          {tenant.firstName[0]}{tenant.lastName[0]}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {tenant.firstName} {tenant.lastName}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            {property.name} - Unit {unit.unitNumber}
+                          </p>
+                          {contractData.contractNumber && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Contract: {contractData.contractNumber}
+                            </p>
+                          )}
+                        </div>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 ml-3">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Pending Approval
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 mb-3 text-sm">
+                        <div className="flex flex-col">
+                          <p className="text-xs text-gray-600 mb-0.5">Start Date</p>
+                          <p className="font-medium text-gray-900">{formatDate(new Date(contractData.startDate))}</p>
+                        </div>
+                        <div className="flex flex-col">
+                          <p className="text-xs text-gray-600 mb-0.5">End Date</p>
+                          <p className="font-medium text-gray-900">{formatDate(new Date(contractData.endDate))}</p>
+                        </div>
+                        <div className="flex flex-col">
+                          <p className="text-xs text-gray-600 mb-0.5">Monthly Rent</p>
+                          <p className="font-medium text-gray-900">{formatCurrency(contractData.monthlyRent)}</p>
+                        </div>
+                        <div className="flex flex-col">
+                          <p className="text-xs text-gray-600 mb-0.5">Payment Frequency</p>
+                          <p className="font-medium text-gray-900">{formatPaymentFrequency(contractData.paymentFrequency)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Contracts List */}
       <div className="space-y-3">

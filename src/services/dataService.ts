@@ -54,7 +54,7 @@ class LocalStorageService {
     return this.loadFromStorage<Unit>('units');
   }
 
-  async getTenants(range?: { from: number; to: number }, userRole?: string): Promise<Tenant[]> {
+  async getTenants(range?: { from: number; to: number }, userRole?: string, userId?: string): Promise<Tenant[]> {
     return this.loadFromStorage<Tenant>('tenants');
   }
 
