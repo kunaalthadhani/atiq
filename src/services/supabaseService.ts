@@ -320,10 +320,6 @@ class SupabaseService {
           .order('created_at', { ascending: false });
       }
       
-      const results = [approvedResult, pendingResult];
-      const approvedResult = results[0];
-      const pendingResult = results[1];
-      
       // Debug logging
       console.log('=== PROPERTIES FETCH DEBUG ===');
       console.log('User ID:', userId);
@@ -428,6 +424,11 @@ class SupabaseService {
           { propertyId: createdProperty.id, ...property }, // Include propertyId in request data
           userId
         );
+        // Update the approval request with entity_id for easier querying
+        await supabase!
+          .from('approval_requests')
+          .update({ entity_id: createdProperty.id })
+          .eq('id', approvalRequest.id);
         return {
           requiresApproval: true,
           approvalRequestId: approvalRequest.id,
