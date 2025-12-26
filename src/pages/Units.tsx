@@ -21,7 +21,7 @@ export default function Units() {
 
   const loadData = async () => {
     try {
-      const unitsData = await dataService.getUnits(undefined, user?.role);
+      const unitsData = await dataService.getUnits(undefined, user?.role, user?.id);
       const propertiesData = await dataService.getProperties(user?.role);
       setUnits(unitsData);
       setProperties(propertiesData);

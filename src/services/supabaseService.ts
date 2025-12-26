@@ -412,8 +412,30 @@ class SupabaseService {
   // ============================================
   // UNITS
   // ============================================
-  async getUnits(propertyId?: string, userRole?: string): Promise<Unit[]> {
+  async getUnits(propertyId?: string, userRole?: string, userId?: string): Promise<Unit[]> {
     if (!this.checkSupabase()) return [];
+    
+    let pendingUnitIds: string[] = [];
+    if (userRole !== 'admin' && userId) {
+      try {
+        const { data: approvalRequests } = await supabase!
+          .from('approval_requests')
+          .select('entity_id, request_data')
+          .eq('request_type', 'unit_create')
+          .eq('entity_type', 'unit')
+          .eq('requested_by', userId)
+          .eq('status', 'pending');
+
+        if (approvalRequests) {
+          pendingUnitIds = approvalRequests
+            .map(req => req.entity_id || req.request_data?.unitId)
+            .filter((id): id is string => !!id);
+        }
+      } catch (error) {
+        console.error('Error fetching pending unit approval requests:', error);
+      }
+    }
+    
     let query = supabase!
       .from('units')
       .select('*');
@@ -422,9 +444,14 @@ class SupabaseService {
       query = query.eq('property_id', propertyId);
     }
     
-    // Non-admin users only see approved units (or units with null approval_status for backward compatibility)
+    // Non-admin users see approved units and their own pending units
     if (userRole !== 'admin') {
-      query = query.or('approval_status.is.null,approval_status.eq.approved');
+      if (pendingUnitIds.length > 0) {
+        const idFilter = pendingUnitIds.map(id => `'${id}'`).join(',');
+        query = query.or(`approval_status.is.null,approval_status.eq.approved,and(approval_status.eq.pending,id.in.(${idFilter}))`);
+      } else {
+        query = query.or('approval_status.is.null,approval_status.eq.approved');
+      }
     }
     
     const { data, error } = await query.order('created_at', { ascending: false });
@@ -1652,7 +1679,7 @@ class SupabaseService {
         if (row.approved_by) userIds.add(row.approved_by);
       });
       
-      // Fetch user names
+      // Fetch user names from users table
       console.log('Fetching user names for IDs:', Array.from(userIds));
       const { data: usersData, error: usersError } = await supabase!
         .from('users')
@@ -1662,16 +1689,40 @@ class SupabaseService {
       console.log('Users data fetched:', usersData);
       console.log('Users error:', usersError);
       
-      const usersMap = new Map((usersData || []).map((u: any) => [u.id, u]));
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+        console.error('This might be due to RLS policies. Check your users table RLS policies.');
+      }
+      
+      const usersMap = new Map<string, { name?: string; email?: string }>();
+      
+      // Build users map from fetched data
+      if (usersData && usersData.length > 0) {
+        usersData.forEach((u: any) => {
+          usersMap.set(u.id, { name: u.name, email: u.email });
+        });
+      }
+      
+      // Check which users are missing
+      const missingUserIds = Array.from(userIds).filter(id => !usersMap.has(id));
+      if (missingUserIds.length > 0) {
+        console.warn('Users not found in users table:', missingUserIds);
+        console.warn('These users may need to be added to the users table or RLS policies may be blocking access.');
+      }
       
       const result = data.map((row: any) => {
         const requester = usersMap.get(row.requested_by);
         const approver = usersMap.get(row.approved_by);
-        console.log(`Request ${row.id}: requested_by=${row.requested_by}, requester=${requester?.name || 'NOT FOUND'}`);
+        
+        // Use name if available, otherwise use email, otherwise use 'Unknown'
+        const requesterName = requester?.name || requester?.email || `User ${row.requested_by?.substring(0, 8)}...` || 'Unknown';
+        const approverName = approver?.name || approver?.email || undefined;
+        
+        console.log(`Request ${row.id}: requested_by=${row.requested_by}, requester=${requesterName}`);
         return {
           ...mapApprovalRequest(row),
-          requesterName: requester?.name,
-          approverName: approver?.name,
+          requesterName,
+          approverName,
         };
       });
       
@@ -1823,7 +1874,12 @@ class SupabaseService {
           
           // Update unit with any modifications from admin
           const unitUpdateData: any = { ...request.request_data };
-          delete unitUpdateData.unitId; // Remove unitId from update data
+          // Remove fields that shouldn't be updated
+          delete unitUpdateData.unitId;
+          delete unitUpdateData.id;
+          delete unitUpdateData.createdAt;
+          delete unitUpdateData.approvalStatus;
+          delete unitUpdateData.approval_status;
           
           const updatedUnit = await this.updateUnit(unitId, unitUpdateData);
           if (!updatedUnit) {

@@ -50,7 +50,9 @@ class LocalStorageService {
     return this.loadFromStorage<Property>('properties');
   }
 
-  async getUnits(): Promise<Unit[]> {
+  async getUnits(propertyId?: string, userRole?: string, userId?: string): Promise<Unit[]> {
+    const _unused = { propertyId, userRole, userId };
+    void _unused;
     return this.loadFromStorage<Unit>('units');
   }
 
