@@ -1208,6 +1208,7 @@ export default function Contracts() {
 
 // Tenant Form Component (extracted from Tenants.tsx)
 function TenantForm({ onSuccess, onCancel }: { onSuccess: (tenant: Tenant) => void; onCancel: () => void }) {
+  const { user } = useAuth();
   const [error, setError] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1239,11 +1240,16 @@ function TenantForm({ onSuccess, onCancel }: { onSuccess: (tenant: Tenant) => vo
     };
 
     try {
-      const newTenant = await dataService.createTenant(tenantData);
-      onSuccess(newTenant);
-    } catch (error) {
+      const result = await dataService.createTenant(tenantData, user?.id, user?.role);
+      if ('requiresApproval' in result) {
+        alert(result.message || 'Tenant creation request submitted for approval');
+        onCancel(); // Close the form
+      } else {
+        onSuccess(result);
+      }
+    } catch (error: any) {
       console.error('Error creating tenant:', error);
-      setError('Failed to create tenant. Please try again.');
+      setError(error?.message || 'Failed to create tenant. Please try again.');
     }
   };
 

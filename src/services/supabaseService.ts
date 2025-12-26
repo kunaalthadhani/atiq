@@ -473,8 +473,34 @@ class SupabaseService {
     return mapTenant(data);
   }
 
-  async createTenant(tenant: Omit<Tenant, 'id' | 'createdAt'>): Promise<Tenant> {
+  async createTenant(
+    tenant: Omit<Tenant, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Tenant | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // If user is not admin, create approval request instead
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'tenant_create',
+          'tenant',
+          tenant,
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Tenant creation request submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        throw error;
+      }
+    }
+    
+    // Admin can create directly
     const { data, error } = await supabase!
       .from('tenants')
       .insert(toTenantRow(tenant))
@@ -1301,7 +1327,7 @@ class SupabaseService {
   // ============================================
   async createApprovalRequest(
     requestType: ApprovalRequestType,
-    entityType: 'contract' | 'payment',
+    entityType: 'contract' | 'payment' | 'tenant',
     requestData: any,
     userId: string
   ): Promise<ApprovalRequest> {
@@ -1431,6 +1457,14 @@ class SupabaseService {
     
     try {
       switch (request.request_type) {
+        case 'tenant_create':
+          const tenantResult = await this.createTenant(request.request_data, approverId, 'admin');
+          if ('requiresApproval' in tenantResult) {
+            return { success: false, message: 'Unexpected approval requirement' };
+          }
+          entityId = tenantResult.id;
+          break;
+          
         case 'contract_create':
           const contractResult = await this.createContract(request.request_data, approverId, 'admin');
           if (contractResult.success && contractResult.contract) {

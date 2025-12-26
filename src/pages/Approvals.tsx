@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, DollarSign, AlertCircle } from 'lucide-react';
+import { FileText, DollarSign, AlertCircle, Users } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails } from '@/types';
@@ -97,6 +97,8 @@ export default function Approvals() {
       case 'payment_create':
       case 'payment_delete':
         return <DollarSign className="w-5 h-5" />;
+      case 'tenant_create':
+        return <Users className="w-5 h-5" />;
       default:
         return <AlertCircle className="w-5 h-5" />;
     }
@@ -114,6 +116,8 @@ export default function Approvals() {
         return 'Create Payment';
       case 'payment_delete':
         return 'Delete Payment';
+      case 'tenant_create':
+        return 'Create Tenant';
       default:
         return type;
     }

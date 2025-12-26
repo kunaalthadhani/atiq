@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar, Eye } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Tenant } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Tenants() {
+  const { user } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -114,17 +116,23 @@ export default function Tenants() {
 
       if (editingTenant) {
         await dataService.updateTenant(editingTenant.id, tenantData);
+        alert('Tenant updated successfully');
       } else {
-        await dataService.createTenant(tenantData);
+        const result = await dataService.createTenant(tenantData, user?.id, user?.role);
+        if ('requiresApproval' in result) {
+          alert(result.message || 'Tenant creation request submitted for approval');
+        } else {
+          alert('Tenant created successfully');
+        }
       }
 
       await loadTenants();
       setShowForm(false);
       setEditingTenant(null);
       setSelectedIdType('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving tenant:', error);
-      alert('Failed to save tenant. Please try again.');
+      alert(error?.message || 'Failed to save tenant. Please try again.');
     }
   };
 

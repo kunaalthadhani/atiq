@@ -377,7 +377,15 @@ class LocalStorageService {
     return invoice;
   }
 
-  async createTenant(tenant: Omit<Tenant, 'id' | 'createdAt'>): Promise<Tenant> {
+  async createTenant(
+    tenant: Omit<Tenant, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Tenant | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
+    // Parameters required for interface compatibility with supabaseService
+    const _unused = { _userId: userId, _userRole: userRole };
+    void _unused;
+    
     const tenants = this.loadFromStorage<Tenant>('tenants');
     const newTenant: Tenant = {
       ...tenant,
