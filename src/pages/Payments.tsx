@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Wallet, X, Trash2, Share2, MessageSquare, Mail, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, Search, Wallet, X, Trash2, Share2, MessageSquare, Mail, TrendingUp, Calendar, AlertCircle, Clock } from 'lucide-react';
 import { dataService } from '@/services/dataService';
-import { Payment, InvoiceWithDetails } from '@/types';
+import { Payment, InvoiceWithDetails, ApprovalRequestWithDetails } from '@/types';
 import { formatCurrency, formatDate, generateWhatsAppLink, generateEmailLink, cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -9,6 +9,7 @@ export default function Payments() {
   const { user } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
@@ -38,6 +39,17 @@ export default function Payments() {
       const invoicesData = await dataService.getInvoices();
       setPayments(paymentsData);
       setInvoices(invoicesData);
+      
+      // Load pending approval requests for payments
+      try {
+        const approvalRequests = await dataService.getApprovalRequests('pending', undefined);
+        const paymentApprovals = approvalRequests.filter(
+          req => req.requestType === 'payment_create' && req.status === 'pending'
+        );
+        setPendingApprovals(paymentApprovals);
+      } catch (error) {
+        console.error('Error loading approval requests:', error);
+      }
     } catch (error) {
       console.error('Error loading payments data:', error);
       setPayments([]);
@@ -47,6 +59,12 @@ export default function Payments() {
 
   const getInvoiceDetails = (invoiceId: string) => {
     return invoices.find(inv => inv.id === invoiceId);
+  };
+
+  // Get pending payment requests for current user
+  const getUserPendingPaymentRequests = () => {
+    if (!user) return [];
+    return pendingApprovals.filter(approval => approval.requestedBy === user.id);
   };
 
   // Sort payments by date (newest first)
@@ -276,6 +294,40 @@ Unit: ${invoice.unit.unitNumber}`;
           ));
         })()}
       </div>
+
+      {/* Pending Payment Requests Section */}
+      {getUserPendingPaymentRequests().length > 0 && (
+        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-5 h-5 text-yellow-600" />
+            <h3 className="font-semibold text-yellow-900">Pending Payment Approvals</h3>
+          </div>
+          <div className="space-y-2">
+            {getUserPendingPaymentRequests().map((approval) => {
+              const invoice = invoices.find(inv => inv.id === approval.requestData?.invoiceId);
+              return (
+                <div key={approval.id} className="bg-white rounded-lg p-3 border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {formatCurrency(approval.requestData?.amount || 0)} - {invoice ? `${invoice.tenant.firstName} ${invoice.tenant.lastName}` : 'Unknown'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Invoice: {invoice?.invoiceNumber || approval.requestData?.invoiceId} • 
+                        Method: {approval.requestData?.paymentMethod?.replace('_', ' ') || 'N/A'} • 
+                        Date: {approval.requestData?.paymentDate ? formatDate(new Date(approval.requestData.paymentDate)) : 'N/A'}
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                      Awaiting Approval
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6">
