@@ -1433,7 +1433,7 @@ class SupabaseService {
   // ============================================
   async createApprovalRequest(
     requestType: ApprovalRequestType,
-    entityType: 'contract' | 'payment' | 'tenant',
+    entityType: 'contract' | 'payment' | 'tenant' | 'property' | 'unit',
     requestData: any,
     userId: string
   ): Promise<ApprovalRequest> {
