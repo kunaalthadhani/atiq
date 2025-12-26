@@ -25,6 +25,7 @@ const mapProperty = (row: any): Property => ({
   postalCode: row.postal_code,
   notes: row.notes,
   isActive: row.is_active ?? true,
+  approvalStatus: row.approval_status || 'approved', // Default to approved for existing properties
 });
 
 const mapUnit = (row: any): Unit => ({
@@ -41,6 +42,7 @@ const mapUnit = (row: any): Unit => ({
   images: row.images || [],
   notes: row.notes,
   createdAt: new Date(row.created_at),
+  approvalStatus: row.approval_status || 'approved', // Default to approved for existing units
 });
 
 const mapTenant = (row: any): Tenant => ({
@@ -124,33 +126,45 @@ const mapReminder = (row: any): Reminder => ({
 });
 
 // Helper to convert TypeScript type to database row
-const toPropertyRow = (property: Omit<Property, 'id' | 'createdAt'>) => ({
-  name: property.name,
-  address: property.address,
-  address_line_2: property.addressLine2,
-  city: property.city,
-  country: property.country,
-  images: property.images || [],
-  short_code: property.shortCode,
-  state: property.state,
-  postal_code: property.postalCode,
-  notes: property.notes,
-  is_active: property.isActive ?? true,
-});
+const toPropertyRow = (property: Omit<Property, 'id' | 'createdAt'> & { approval_status?: string }) => {
+  const row: any = {
+    name: property.name,
+    address: property.address,
+    address_line_2: property.addressLine2,
+    city: property.city,
+    country: property.country,
+    images: property.images || [],
+    short_code: property.shortCode,
+    state: property.state,
+    postal_code: property.postalCode,
+    notes: property.notes,
+    is_active: property.isActive ?? true,
+  };
+  if (property.approval_status !== undefined) {
+    row.approval_status = property.approval_status;
+  }
+  return row;
+};
 
-const toUnitRow = (unit: Omit<Unit, 'id' | 'createdAt'>) => ({
-  property_id: unit.propertyId,
-  unit_number: unit.unitNumber,
-  type: unit.type,
-  floor: unit.floor,
-  bedrooms: unit.bedrooms,
-  bathrooms: unit.bathrooms,
-  square_feet: unit.squareFeet,
-  monthly_rent: unit.monthlyRent,
-  is_occupied: unit.isOccupied,
-  images: unit.images || [],
-  notes: unit.notes,
-});
+const toUnitRow = (unit: Omit<Unit, 'id' | 'createdAt'> & { approval_status?: string }) => {
+  const row: any = {
+    property_id: unit.propertyId,
+    unit_number: unit.unitNumber,
+    type: unit.type,
+    floor: unit.floor,
+    bedrooms: unit.bedrooms,
+    bathrooms: unit.bathrooms,
+    square_feet: unit.squareFeet,
+    monthly_rent: unit.monthlyRent,
+    is_occupied: unit.isOccupied,
+    images: unit.images || [],
+    notes: unit.notes,
+  };
+  if (unit.approval_status !== undefined) {
+    row.approval_status = unit.approval_status;
+  }
+  return row;
+};
 
 const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_status?: string }) => {
   const row: any = {
@@ -247,13 +261,19 @@ class SupabaseService {
   // ============================================
   // PROPERTIES
   // ============================================
-  async getProperties(): Promise<Property[]> {
+  async getProperties(userRole?: string): Promise<Property[]> {
     if (!this.checkSupabase()) return [];
 
-    const { data, error } = await supabase!
+    let query = supabase!
       .from('properties')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+    
+    // Non-admin users only see approved properties (or properties with null approval_status for backward compatibility)
+    if (userRole !== 'admin') {
+      query = query.or('approval_status.is.null,approval_status.eq.approved');
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching properties:', error);
@@ -279,11 +299,21 @@ class SupabaseService {
     return mapProperty(data);
   }
 
-  async createProperty(property: Omit<Property, 'id' | 'createdAt'>): Promise<Property> {
+  async createProperty(
+    property: Omit<Property, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Property | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Always create the property, but set approval_status based on user role
+    const propertyRow = toPropertyRow(property);
+    const approvalStatus = userRole === 'admin' ? 'approved' : 'pending';
+    propertyRow.approval_status = approvalStatus;
+    
     const { data, error } = await supabase!
       .from('properties')
-      .insert(toPropertyRow(property))
+      .insert(propertyRow)
       .select()
       .single();
     
@@ -292,7 +322,31 @@ class SupabaseService {
       throw error;
     }
     
-    return mapProperty(data);
+    const createdProperty = mapProperty(data);
+    
+    // If user is not admin, create approval request
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'property_create',
+          'property',
+          { propertyId: createdProperty.id, ...property }, // Include propertyId in request data
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Property created and submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        // Property is already created, so we still return it
+        return createdProperty;
+      }
+    }
+    
+    // Admin can see property immediately
+    return createdProperty;
   }
 
   async updateProperty(id: string, updates: Partial<Omit<Property, 'id' | 'createdAt'>>): Promise<Property | null> {
@@ -343,18 +397,22 @@ class SupabaseService {
   // ============================================
   // UNITS
   // ============================================
-  async getUnits(propertyId?: string): Promise<Unit[]> {
+  async getUnits(propertyId?: string, userRole?: string): Promise<Unit[]> {
     if (!this.checkSupabase()) return [];
     let query = supabase!
       .from('units')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
     
     if (propertyId) {
       query = query.eq('property_id', propertyId);
     }
     
-    const { data, error } = await query;
+    // Non-admin users only see approved units (or units with null approval_status for backward compatibility)
+    if (userRole !== 'admin') {
+      query = query.or('approval_status.is.null,approval_status.eq.approved');
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching units:', error);
@@ -380,11 +438,21 @@ class SupabaseService {
     return mapUnit(data);
   }
 
-  async createUnit(unit: Omit<Unit, 'id' | 'createdAt'>): Promise<Unit> {
+  async createUnit(
+    unit: Omit<Unit, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Unit | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Always create the unit, but set approval_status based on user role
+    const unitRow = toUnitRow(unit);
+    const approvalStatus = userRole === 'admin' ? 'approved' : 'pending';
+    unitRow.approval_status = approvalStatus;
+    
     const { data, error } = await supabase!
       .from('units')
-      .insert(toUnitRow(unit))
+      .insert(unitRow)
       .select()
       .single();
     
@@ -393,7 +461,31 @@ class SupabaseService {
       throw error;
     }
     
-    return mapUnit(data);
+    const createdUnit = mapUnit(data);
+    
+    // If user is not admin, create approval request
+    if (userRole !== 'admin' && userId) {
+      try {
+        const approvalRequest = await this.createApprovalRequest(
+          'unit_create',
+          'unit',
+          { unitId: createdUnit.id, ...unit }, // Include unitId in request data
+          userId
+        );
+        return {
+          requiresApproval: true,
+          approvalRequestId: approvalRequest.id,
+          message: 'Unit created and submitted for approval'
+        };
+      } catch (error: any) {
+        console.error('Error creating approval request:', error);
+        // Unit is already created, so we still return it
+        return createdUnit;
+      }
+    }
+    
+    // Admin can see unit immediately
+    return createdUnit;
   }
 
   async updateUnit(id: string, updates: Partial<Omit<Unit, 'id' | 'createdAt'>>): Promise<Unit | null> {
@@ -1547,6 +1639,66 @@ class SupabaseService {
           }
           break;
           
+        case 'property_create':
+          // Update existing property instead of creating new one
+          const propertyId = request.request_data.propertyId;
+          if (!propertyId) {
+            return { success: false, message: 'Property ID not found in request' };
+          }
+          
+          // Update property with any modifications from admin
+          const propertyUpdateData: any = { ...request.request_data };
+          delete propertyUpdateData.propertyId; // Remove propertyId from update data
+          
+          const updatedProperty = await this.updateProperty(propertyId, propertyUpdateData);
+          if (!updatedProperty) {
+            return { success: false, message: 'Failed to update property' };
+          }
+          
+          // Set approval status to approved
+          const { error: propertyUpdateError } = await supabase!
+            .from('properties')
+            .update({ approval_status: 'approved' })
+            .eq('id', propertyId);
+          
+          if (propertyUpdateError) {
+            console.error('Error updating property approval status:', propertyUpdateError);
+            return { success: false, message: 'Failed to approve property' };
+          }
+          
+          entityId = propertyId;
+          break;
+          
+        case 'unit_create':
+          // Update existing unit instead of creating new one
+          const unitId = request.request_data.unitId;
+          if (!unitId) {
+            return { success: false, message: 'Unit ID not found in request' };
+          }
+          
+          // Update unit with any modifications from admin
+          const unitUpdateData: any = { ...request.request_data };
+          delete unitUpdateData.unitId; // Remove unitId from update data
+          
+          const updatedUnit = await this.updateUnit(unitId, unitUpdateData);
+          if (!updatedUnit) {
+            return { success: false, message: 'Failed to update unit' };
+          }
+          
+          // Set approval status to approved
+          const { error: unitUpdateError } = await supabase!
+            .from('units')
+            .update({ approval_status: 'approved' })
+            .eq('id', unitId);
+          
+          if (unitUpdateError) {
+            console.error('Error updating unit approval status:', unitUpdateError);
+            return { success: false, message: 'Failed to approve unit' };
+          }
+          
+          entityId = unitId;
+          break;
+          
         default:
           return { success: false, message: 'Unknown request type' };
       }
@@ -1612,6 +1764,43 @@ class SupabaseService {
     reason: string
   ): Promise<{ success: boolean; message?: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Get the request to check entity type
+    const { data: request } = await supabase!
+      .from('approval_requests')
+      .select('request_type, request_data')
+      .eq('id', requestId)
+      .single();
+    
+    // Set approval_status to rejected for the entity
+    if (request?.request_type === 'tenant_create' && request.request_data?.tenantId) {
+      const { error: tenantError } = await supabase!
+        .from('tenants')
+        .update({ approval_status: 'rejected' })
+        .eq('id', request.request_data.tenantId);
+      
+      if (tenantError) {
+        console.error('Error updating tenant rejection status:', tenantError);
+      }
+    } else if (request?.request_type === 'property_create' && request.request_data?.propertyId) {
+      const { error: propertyError } = await supabase!
+        .from('properties')
+        .update({ approval_status: 'rejected' })
+        .eq('id', request.request_data.propertyId);
+      
+      if (propertyError) {
+        console.error('Error updating property rejection status:', propertyError);
+      }
+    } else if (request?.request_type === 'unit_create' && request.request_data?.unitId) {
+      const { error: unitError } = await supabase!
+        .from('units')
+        .update({ approval_status: 'rejected' })
+        .eq('id', request.request_data.unitId);
+      
+      if (unitError) {
+        console.error('Error updating unit rejection status:', unitError);
+      }
+    }
     
     const { error } = await supabase!
       .from('approval_requests')

@@ -46,7 +46,7 @@ class LocalStorageService {
     localStorage.setItem(this.getStorageKey(key), JSON.stringify(data));
   }
 
-  async getProperties(): Promise<Property[]> {
+  async getProperties(userRole?: string): Promise<Property[]> {
     return this.loadFromStorage<Property>('properties');
   }
 
@@ -432,7 +432,11 @@ class LocalStorageService {
     return true;
   }
 
-  async createUnit(unit: Omit<Unit, 'id' | 'createdAt'>): Promise<Unit> {
+  async createUnit(
+    unit: Omit<Unit, 'id' | 'createdAt'>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Unit | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     const units = this.loadFromStorage<Unit>('units');
     const newUnit: Unit = {
       ...unit,

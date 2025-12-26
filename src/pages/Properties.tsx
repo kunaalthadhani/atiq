@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Building2, MapPin, Home, X, Edit2, Trash2, Upload, ChevronDown } from 'lucide-react';
+import { Plus, Search, Building2, MapPin, Home, X, Edit2, Trash2, Upload, ChevronDown, Clock } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Property, Unit } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Properties() {
+  const { user } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -29,8 +31,8 @@ export default function Properties() {
   const loadProperties = async () => {
     try {
       const [propertiesData, unitsData] = await Promise.all([
-        dataService.getProperties(),
-        dataService.getUnits()
+        dataService.getProperties(user?.role),
+        dataService.getUnits(undefined, user?.role)
       ]);
       setProperties(propertiesData);
       setUnits(unitsData);
@@ -91,7 +93,10 @@ export default function Properties() {
       if (editingProperty) {
         await dataService.updateProperty(editingProperty.id, propertyData);
       } else {
-        await dataService.createProperty(propertyData);
+        const result = await dataService.createProperty(propertyData, user?.id, user?.role);
+        if ('requiresApproval' in result) {
+          alert(result.message || 'Property creation request submitted for approval');
+        }
       }
 
       await loadProperties();
@@ -292,6 +297,12 @@ export default function Properties() {
                       }`}>
                         {(property.isActive ?? true) ? 'Active' : 'Not Active'}
                       </span>
+                      {property.approvalStatus === 'pending' && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Pending Approval
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center text-sm text-gray-600 mb-1">
                       <MapPin className="w-4 h-4 mr-1.5 flex-shrink-0" />

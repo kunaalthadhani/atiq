@@ -20,3 +20,5 @@ ALTER TABLE approval_requests
   ADD CONSTRAINT approval_requests_entity_type_check 
   CHECK (entity_type IN ('contract', 'payment', 'tenant'));
 
+
+

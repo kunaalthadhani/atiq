@@ -15,3 +15,5 @@ CREATE POLICY "Admins can view all users"
 -- Note: Password reset emails are sent via Supabase Auth API
 -- which doesn't require additional RLS policies
 
+
+

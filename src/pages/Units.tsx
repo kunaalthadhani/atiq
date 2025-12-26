@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Unit, Property } from '@/types';
 import { formatCurrency, cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Units() {
+  const { user } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,8 +21,8 @@ export default function Units() {
 
   const loadData = async () => {
     try {
-      const unitsData = await dataService.getUnits();
-      const propertiesData = await dataService.getProperties();
+      const unitsData = await dataService.getUnits(undefined, user?.role);
+      const propertiesData = await dataService.getProperties(user?.role);
       setUnits(unitsData);
       setProperties(propertiesData);
     } catch (error) {
@@ -64,7 +66,10 @@ export default function Units() {
       if (editingUnit) {
         await dataService.updateUnit(editingUnit.id, unitData);
       } else {
-        await dataService.createUnit(unitData);
+        const result = await dataService.createUnit(unitData, user?.id, user?.role);
+        if ('requiresApproval' in result) {
+          alert(result.message || 'Unit creation request submitted for approval');
+        }
       }
 
       await loadData();
@@ -204,6 +209,12 @@ export default function Units() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Unit {unit.unitNumber}</h3>
                   <p className="text-sm text-gray-600">{getPropertyName(unit.propertyId)}</p>
+                  {unit.approvalStatus === 'pending' && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mt-1">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Pending Approval
+                    </span>
+                  )}
                 </div>
                 <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded">
                   {unit.type.toUpperCase()}

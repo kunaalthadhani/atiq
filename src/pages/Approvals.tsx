@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FileText, DollarSign, AlertCircle, Users } from 'lucide-react';
+import { FileText, DollarSign, AlertCircle, Users, Building2, Home } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails } from '@/types';
+import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails, Property } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
 
 export default function Approvals() {
@@ -13,15 +13,54 @@ export default function Approvals() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [invoiceDetails, setInvoiceDetails] = useState<InvoiceWithDetails | null>(null);
+  const [propertyDetails, setPropertyDetails] = useState<Property | null>(null);
 
   // Check if user is admin (with trimming to handle whitespace issues)
   const isAdmin = user?.role?.trim() === 'admin';
+
+  // Helper function to handle approval request data updates
+  const handleApprovalRequestUpdate = async (updatedData: any) => {
+    if (!selectedRequest) return;
+    
+    // Update local state
+    const updated = {
+      ...selectedRequest,
+      requestData: { ...selectedRequest.requestData, ...updatedData }
+    };
+    setSelectedRequest(updated);
+    
+    // Update approval request in database
+    try {
+      await dataService.updateApprovalRequestData(selectedRequest.id, updatedData);
+    } catch (error) {
+      console.error('Error updating approval request data:', error);
+    }
+  };
 
   useEffect(() => {
     if (isAdmin) {
       loadRequests();
     }
   }, [user, filter, isAdmin]);
+
+  // Load property details when unit_create request is selected
+  useEffect(() => {
+    if (selectedRequest?.requestType === 'unit_create' && selectedRequest.requestData?.propertyId) {
+      const loadProperty = async () => {
+        try {
+          const properties = await dataService.getProperties();
+          const property = properties.find(p => p.id === selectedRequest.requestData.propertyId);
+          setPropertyDetails(property || null);
+        } catch (error) {
+          console.error('Error loading property details:', error);
+          setPropertyDetails(null);
+        }
+      };
+      loadProperty();
+    } else {
+      setPropertyDetails(null);
+    }
+  }, [selectedRequest]);
 
   const loadRequests = async () => {
     try {
@@ -99,6 +138,10 @@ export default function Approvals() {
         return <DollarSign className="w-5 h-5" />;
       case 'tenant_create':
         return <Users className="w-5 h-5" />;
+      case 'property_create':
+        return <Building2 className="w-5 h-5" />;
+      case 'unit_create':
+        return <Home className="w-5 h-5" />;
       default:
         return <AlertCircle className="w-5 h-5" />;
     }
@@ -118,6 +161,10 @@ export default function Approvals() {
         return 'Delete Payment';
       case 'tenant_create':
         return 'Create Tenant';
+      case 'property_create':
+        return 'Create Property';
+      case 'unit_create':
+        return 'Create Unit';
       default:
         return type;
     }
@@ -243,33 +290,34 @@ export default function Approvals() {
                   <p className="text-gray-900">{formatDate(selectedRequest.createdAt)}</p>
                 </div>
                 
-                {/* Show request data based on type */}
+                {/* Show request data based on type - Render appropriate editor component */}
+                {selectedRequest.requestType === 'tenant_create' && (
+                  <TenantApprovalEditor
+                    request={selectedRequest}
+                    onUpdate={handleApprovalRequestUpdate}
+                  />
+                )}
+                
+                {selectedRequest.requestType === 'property_create' && (
+                  <PropertyApprovalEditor
+                    request={selectedRequest}
+                    onUpdate={handleApprovalRequestUpdate}
+                  />
+                )}
+                
+                {selectedRequest.requestType === 'unit_create' && (
+                  <UnitApprovalEditor
+                    request={selectedRequest}
+                    propertyDetails={propertyDetails}
+                    onUpdate={handleApprovalRequestUpdate}
+                  />
+                )}
+                
                 {selectedRequest.requestType === 'contract_create' && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold mb-2">Contract Details</h3>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="font-medium text-gray-600">Monthly Rent:</span>{' '}
-                        {formatCurrency(selectedRequest.requestData.monthlyRent)}
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-600">Security Deposit:</span>{' '}
-                        {formatCurrency(selectedRequest.requestData.securityDeposit)}
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-600">Start Date:</span>{' '}
-                        {formatDate(new Date(selectedRequest.requestData.startDate))}
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-600">End Date:</span>{' '}
-                        {formatDate(new Date(selectedRequest.requestData.endDate))}
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-600">Status:</span>{' '}
-                        {selectedRequest.requestData.status}
-                      </div>
-                    </div>
-                  </div>
+                  <ContractApprovalEditor
+                    request={selectedRequest}
+                    onUpdate={handleApprovalRequestUpdate}
+                  />
                 )}
                 
                 {selectedRequest.requestType === 'contract_terminate' && (
@@ -331,61 +379,11 @@ export default function Approvals() {
                     )}
                     
                     {/* Payment Details */}
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                      <h3 className="font-semibold mb-2">Payment Details</h3>
-                      <div className="space-y-2 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-600">Amount:</span>{' '}
-                          <span className="text-lg font-bold text-green-600">
-                            {formatCurrency(selectedRequest.requestData.amount)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-600">Payment Method:</span>{' '}
-                          <span className="capitalize">
-                            {selectedRequest.requestData.paymentMethod?.replace('_', ' ') || 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-600">Payment Date:</span>{' '}
-                          {formatDate(new Date(selectedRequest.requestData.paymentDate))}
-                        </div>
-                        {selectedRequest.requestData.referenceNumber && (
-                          <div>
-                            <span className="font-medium text-gray-600">Reference Number:</span>{' '}
-                            <span className="font-mono">{selectedRequest.requestData.referenceNumber}</span>
-                          </div>
-                        )}
-                        {selectedRequest.requestData.notes && (
-                          <div>
-                            <span className="font-medium text-gray-600">Notes:</span>
-                            <p className="text-gray-700 mt-1 whitespace-pre-wrap">{selectedRequest.requestData.notes}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <PaymentApprovalEditor
+                      request={selectedRequest}
+                      onUpdate={handleApprovalRequestUpdate}
+                    />
                   </>
-                )}
-                
-                {selectedRequest.requestType === 'tenant_create' && (
-                  <TenantApprovalEditor
-                    request={selectedRequest}
-                    onUpdate={async (updatedData) => {
-                      // Update local state
-                      const updated = {
-                        ...selectedRequest,
-                        requestData: { ...selectedRequest.requestData, ...updatedData }
-                      };
-                      setSelectedRequest(updated);
-                      
-                      // Update approval request in database
-                      try {
-                        await dataService.updateApprovalRequestData(selectedRequest.id, updatedData);
-                      } catch (error) {
-                        console.error('Error updating approval request data:', error);
-                      }
-                    }}
-                  />
                 )}
               </div>
 
@@ -650,6 +648,790 @@ function TenantApprovalEditor({
               onChange={(e) => handleFieldChange('notes', e.target.value)}
               rows={3}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Property Approval Editor Component
+function PropertyApprovalEditor({ 
+  request, 
+  onUpdate 
+}: { 
+  request: ApprovalRequestWithDetails; 
+  onUpdate: (data: any) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(request.requestData);
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const updated = { ...editedData, [field]: value };
+    setEditedData(updated);
+    onUpdate(updated);
+  };
+  
+  if (!isEditing) {
+    return (
+      <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-green-900">Property Information</h3>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="font-medium text-gray-600">Name:</span>
+            <p className="text-gray-900 font-semibold">{editedData.name}</p>
+          </div>
+          {editedData.shortCode && (
+            <div>
+              <span className="font-medium text-gray-600">Short Code:</span>
+              <p className="text-gray-900">{editedData.shortCode}</p>
+            </div>
+          )}
+          <div className="col-span-2">
+            <span className="font-medium text-gray-600">Address:</span>
+            <p className="text-gray-900">{editedData.address}</p>
+          </div>
+          {editedData.addressLine2 && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Address Line 2:</span>
+              <p className="text-gray-900">{editedData.addressLine2}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-gray-600">City:</span>
+            <p className="text-gray-900">{editedData.city}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">State:</span>
+            <p className="text-gray-900">{editedData.state || '—'}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Country:</span>
+            <p className="text-gray-900">{editedData.country}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Postal Code:</span>
+            <p className="text-gray-900">{editedData.postalCode || '—'}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Status:</span>
+            <p className="text-gray-900">
+              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                editedData.isActive !== false 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-gray-100 text-gray-700'
+              }`}>
+                {editedData.isActive !== false ? 'Active' : 'Inactive'}
+              </span>
+            </p>
+          </div>
+          {editedData.images && editedData.images.length > 0 && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Images ({editedData.images.length}):</span>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {editedData.images.map((img: string, idx: number) => (
+                  <img
+                    key={idx}
+                    src={img}
+                    alt={`Property ${idx + 1}`}
+                    className="w-full h-24 object-cover rounded-lg border border-gray-300"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {editedData.notes && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Notes:</span>
+              <p className="text-gray-700 mt-1 whitespace-pre-wrap">{editedData.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-green-900">Edit Property Information</h3>
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Cancel Edit
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
+          <input
+            type="text"
+            value={editedData.name || ''}
+            onChange={(e) => handleFieldChange('name', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        {editedData.shortCode !== undefined && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Short Code</label>
+            <input
+              type="text"
+              value={editedData.shortCode || ''}
+              onChange={(e) => handleFieldChange('shortCode', e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Address *</label>
+          <input
+            type="text"
+            value={editedData.address || ''}
+            onChange={(e) => handleFieldChange('address', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        {editedData.addressLine2 !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Address Line 2</label>
+            <input
+              type="text"
+              value={editedData.addressLine2 || ''}
+              onChange={(e) => handleFieldChange('addressLine2', e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">City *</label>
+          <input
+            type="text"
+            value={editedData.city || ''}
+            onChange={(e) => handleFieldChange('city', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">State</label>
+          <input
+            type="text"
+            value={editedData.state || ''}
+            onChange={(e) => handleFieldChange('state', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Country *</label>
+          <input
+            type="text"
+            value={editedData.country || ''}
+            onChange={(e) => handleFieldChange('country', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Postal Code</label>
+          <input
+            type="text"
+            value={editedData.postalCode || ''}
+            onChange={(e) => handleFieldChange('postalCode', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+          <select
+            value={editedData.isActive !== false ? 'active' : 'inactive'}
+            onChange={(e) => handleFieldChange('isActive', e.target.value === 'active')}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        {editedData.notes !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editedData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              rows={3}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Unit Approval Editor Component
+function UnitApprovalEditor({ 
+  request, 
+  propertyDetails,
+  onUpdate 
+}: { 
+  request: ApprovalRequestWithDetails; 
+  propertyDetails: Property | null;
+  onUpdate: (data: any) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(request.requestData);
+  const [properties, setProperties] = useState<Property[]>([]);
+  
+  // Load properties for the dropdown
+  useEffect(() => {
+    const loadProperties = async () => {
+      try {
+        const props = await dataService.getProperties();
+        setProperties(props);
+      } catch (error) {
+        console.error('Error loading properties:', error);
+      }
+    };
+    loadProperties();
+  }, []);
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const updated = { ...editedData, [field]: value };
+    setEditedData(updated);
+    onUpdate(updated);
+  };
+  
+  if (!isEditing) {
+    return (
+      <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-purple-900">Unit Information</h3>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="font-medium text-gray-600">Property:</span>
+            <p className="text-gray-900 font-semibold">
+              {propertyDetails?.name || editedData.propertyId || '—'}
+            </p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Unit Number:</span>
+            <p className="text-gray-900 font-semibold">{editedData.unitNumber}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Type:</span>
+            <p className="text-gray-900 capitalize">{editedData.type}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Bedrooms:</span>
+            <p className="text-gray-900">{editedData.bedrooms}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Bathrooms:</span>
+            <p className="text-gray-900">{editedData.bathrooms}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Square Feet:</span>
+            <p className="text-gray-900">{editedData.squareFeet?.toLocaleString() || '—'}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Monthly Rent:</span>
+            <p className="text-gray-900 font-semibold">{formatCurrency(editedData.monthlyRent)}</p>
+          </div>
+          {editedData.floor !== undefined && (
+            <div>
+              <span className="font-medium text-gray-600">Floor:</span>
+              <p className="text-gray-900">{editedData.floor}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-gray-600">Status:</span>
+            <p className="text-gray-900">
+              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                editedData.isOccupied 
+                  ? 'bg-red-100 text-red-700' 
+                  : 'bg-green-100 text-green-700'
+              }`}>
+                {editedData.isOccupied ? 'Occupied' : 'Vacant'}
+              </span>
+            </p>
+          </div>
+          {editedData.images && editedData.images.length > 0 && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Images ({editedData.images.length}):</span>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {editedData.images.map((img: string, idx: number) => (
+                  <img
+                    key={idx}
+                    src={img}
+                    alt={`Unit ${idx + 1}`}
+                    className="w-full h-24 object-cover rounded-lg border border-gray-300"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {editedData.notes && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Notes:</span>
+              <p className="text-gray-700 mt-1 whitespace-pre-wrap">{editedData.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-purple-900">Edit Unit Information</h3>
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Cancel Edit
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Property *</label>
+          <select
+            value={editedData.propertyId || ''}
+            onChange={(e) => handleFieldChange('propertyId', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          >
+            <option value="">Select Property</option>
+            {properties.map((prop) => (
+              <option key={prop.id} value={prop.id}>
+                {prop.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Unit Number *</label>
+          <input
+            type="text"
+            value={editedData.unitNumber || ''}
+            onChange={(e) => handleFieldChange('unitNumber', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Type *</label>
+          <select
+            value={editedData.type || ''}
+            onChange={(e) => handleFieldChange('type', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          >
+            <option value="">Select Type</option>
+            <option value="studio">Studio</option>
+            <option value="1BR">1BR</option>
+            <option value="2BR">2BR</option>
+            <option value="3BR">3BR</option>
+            <option value="4BR">4BR</option>
+            <option value="penthouse">Penthouse</option>
+            <option value="villa">Villa</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Bedrooms *</label>
+          <input
+            type="number"
+            min="0"
+            value={editedData.bedrooms || ''}
+            onChange={(e) => handleFieldChange('bedrooms', parseInt(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Bathrooms *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={editedData.bathrooms || ''}
+            onChange={(e) => handleFieldChange('bathrooms', parseFloat(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Square Feet</label>
+          <input
+            type="number"
+            min="0"
+            value={editedData.squareFeet || ''}
+            onChange={(e) => handleFieldChange('squareFeet', parseInt(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Rent *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editedData.monthlyRent || ''}
+            onChange={(e) => handleFieldChange('monthlyRent', parseFloat(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        {editedData.floor !== undefined && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Floor</label>
+            <input
+              type="text"
+              value={editedData.floor || ''}
+              onChange={(e) => handleFieldChange('floor', e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+        {editedData.notes !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editedData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              rows={3}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Contract Approval Editor Component
+function ContractApprovalEditor({ 
+  request, 
+  onUpdate 
+}: { 
+  request: ApprovalRequestWithDetails; 
+  onUpdate: (data: any) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(request.requestData);
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const updated = { ...editedData, [field]: value };
+    setEditedData(updated);
+    onUpdate(updated);
+  };
+  
+  if (!isEditing) {
+    return (
+      <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-orange-900">Contract Information</h3>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="font-medium text-gray-600">Monthly Rent:</span>
+            <p className="text-gray-900 font-semibold">{formatCurrency(editedData.monthlyRent)}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Security Deposit:</span>
+            <p className="text-gray-900 font-semibold">{formatCurrency(editedData.securityDeposit)}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Start Date:</span>
+            <p className="text-gray-900">{formatDate(new Date(editedData.startDate))}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">End Date:</span>
+            <p className="text-gray-900">{formatDate(new Date(editedData.endDate))}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Payment Frequency:</span>
+            <p className="text-gray-900">
+              {editedData.paymentFrequency === '1_payment' ? '1 Payment' :
+               editedData.paymentFrequency === '2_payment' ? '2 Payments' :
+               editedData.paymentFrequency === '3_payment' ? '3 Payments' :
+               editedData.paymentFrequency === '4_payment' ? '4 Payments' :
+               editedData.paymentFrequency}
+            </p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Status:</span>
+            <p className="text-gray-900 capitalize">{editedData.status}</p>
+          </div>
+          {editedData.notes && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Notes:</span>
+              <p className="text-gray-700 mt-1 whitespace-pre-wrap">{editedData.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-orange-900">Edit Contract Information</h3>
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Cancel Edit
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Rent *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editedData.monthlyRent || ''}
+            onChange={(e) => handleFieldChange('monthlyRent', parseFloat(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Security Deposit *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editedData.securityDeposit || ''}
+            onChange={(e) => handleFieldChange('securityDeposit', parseFloat(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
+          <input
+            type="date"
+            value={editedData.startDate ? new Date(editedData.startDate).toISOString().split('T')[0] : ''}
+            onChange={(e) => handleFieldChange('startDate', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">End Date *</label>
+          <input
+            type="date"
+            value={editedData.endDate ? new Date(editedData.endDate).toISOString().split('T')[0] : ''}
+            onChange={(e) => handleFieldChange('endDate', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Payment Frequency *</label>
+          <select
+            value={editedData.paymentFrequency || ''}
+            onChange={(e) => handleFieldChange('paymentFrequency', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          >
+            <option value="">Select Frequency</option>
+            <option value="1_payment">1 Payment</option>
+            <option value="2_payment">2 Payments</option>
+            <option value="3_payment">3 Payments</option>
+            <option value="4_payment">4 Payments</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Status *</label>
+          <select
+            value={editedData.status || ''}
+            onChange={(e) => handleFieldChange('status', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          >
+            <option value="">Select Status</option>
+            <option value="draft">Draft</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="terminated">Terminated</option>
+          </select>
+        </div>
+        {editedData.notes !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editedData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              rows={3}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Payment Approval Editor Component
+function PaymentApprovalEditor({ 
+  request, 
+  onUpdate 
+}: { 
+  request: ApprovalRequestWithDetails; 
+  onUpdate: (data: any) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(request.requestData);
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const updated = { ...editedData, [field]: value };
+    setEditedData(updated);
+    onUpdate(updated);
+  };
+  
+  if (!isEditing) {
+    return (
+      <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-green-900">Payment Information</h3>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="font-medium text-gray-600">Amount:</span>
+            <p className="text-gray-900 font-semibold text-lg text-green-600">
+              {formatCurrency(editedData.amount)}
+            </p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Payment Method:</span>
+            <p className="text-gray-900 capitalize">
+              {editedData.paymentMethod?.replace('_', ' ') || 'N/A'}
+            </p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Payment Date:</span>
+            <p className="text-gray-900">{formatDate(new Date(editedData.paymentDate))}</p>
+          </div>
+          {editedData.referenceNumber && (
+            <div>
+              <span className="font-medium text-gray-600">Reference Number:</span>
+              <p className="text-gray-900 font-mono">{editedData.referenceNumber}</p>
+            </div>
+          )}
+          {editedData.notes && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Notes:</span>
+              <p className="text-gray-700 mt-1 whitespace-pre-wrap">{editedData.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-green-900">Edit Payment Information</h3>
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Cancel Edit
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Amount *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editedData.amount || ''}
+            onChange={(e) => handleFieldChange('amount', parseFloat(e.target.value) || 0)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Payment Method *</label>
+          <select
+            value={editedData.paymentMethod || ''}
+            onChange={(e) => handleFieldChange('paymentMethod', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          >
+            <option value="">Select Method</option>
+            <option value="cash">Cash</option>
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="cheque">Cheque</option>
+            <option value="card">Card</option>
+            <option value="online">Online</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Payment Date *</label>
+          <input
+            type="date"
+            value={editedData.paymentDate ? new Date(editedData.paymentDate).toISOString().split('T')[0] : ''}
+            onChange={(e) => handleFieldChange('paymentDate', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+          <input
+            type="text"
+            value={editedData.referenceNumber || ''}
+            onChange={(e) => handleFieldChange('referenceNumber', e.target.value || undefined)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm font-mono"
+            placeholder="Optional"
+          />
+        </div>
+        {editedData.notes !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editedData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value || undefined)}
+              rows={3}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              placeholder="Optional"
             />
           </div>
         )}

@@ -16,3 +16,5 @@ UPDATE tenants
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_tenants_approval_status ON tenants(approval_status);
 
+
+
