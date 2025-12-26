@@ -228,7 +228,8 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<boolean | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     // Parameters required for interface compatibility with supabaseService
-    void _userId; void _userRole;
+    const _unused = { _userId, _userRole };
+    void _unused;
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return false;
@@ -263,7 +264,8 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<Contract | null> {
     // Parameters required for interface compatibility with supabaseService
-    void _userId; void _userRole;
+    const _unused = { _userId, _userRole };
+    void _unused;
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return null;
@@ -289,7 +291,8 @@ class LocalStorageService {
     _userRole?: string
   ): Promise<Payment | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     // Parameters required for interface compatibility with supabaseService
-    void _userId; void _userRole;
+    const _unused = { _userId, _userRole };
+    void _unused;
     const payments = this.loadFromStorage<Payment>('payments');
     const newPayment: Payment = {
       ...payment,
@@ -485,7 +488,8 @@ class LocalStorageService {
     _userId?: string
   ): Promise<ApprovalRequestWithDetails[]> {
     // Parameters required for interface compatibility with supabaseService
-    void _status; void _userId;
+    const _unused = { _status, _userId };
+    void _unused;
     // Approval system requires Supabase
     return [];
   }
@@ -495,7 +499,8 @@ class LocalStorageService {
     _approverId: string
   ): Promise<{ success: boolean; message?: string }> {
     // Parameters required for interface compatibility with supabaseService
-    void _requestId; void _approverId;
+    const _unused = { _requestId, _approverId };
+    void _unused;
     return { success: false, message: 'Approval system requires Supabase' };
   }
 
@@ -505,7 +510,8 @@ class LocalStorageService {
     _reason: string
   ): Promise<{ success: boolean; message?: string }> {
     // Parameters required for interface compatibility with supabaseService
-    void _requestId; void _approverId; void _reason;
+    const _unused = { _requestId, _approverId, _reason };
+    void _unused;
     return { success: false, message: 'Approval system requires Supabase' };
   }
 }
