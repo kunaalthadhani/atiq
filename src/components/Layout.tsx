@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
-  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key, ShieldCheck
+  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Reminder } from '@/types';

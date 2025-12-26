@@ -188,17 +188,18 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
   attachments: contract.attachments || [],
 });
 
-const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => {
-  // Handle paymentDate as either Date object or string
+const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'> & { paymentDate?: Date | string }) => {
+  // Handle paymentDate as either Date object or string (from JSONB)
   let paymentDateStr: string;
-  if (payment.paymentDate instanceof Date) {
-    paymentDateStr = payment.paymentDate.toISOString().split('T')[0];
-  } else if (typeof payment.paymentDate === 'string') {
+  const paymentDate: Date | string = payment.paymentDate as Date | string;
+  if (paymentDate instanceof Date) {
+    paymentDateStr = paymentDate.toISOString().split('T')[0];
+  } else if (typeof paymentDate === 'string') {
     // If it's already a string, use it directly or convert if needed
-    paymentDateStr = payment.paymentDate.split('T')[0];
+    paymentDateStr = paymentDate.split('T')[0];
   } else {
     // Fallback: create new Date
-    paymentDateStr = new Date(payment.paymentDate).toISOString().split('T')[0];
+    paymentDateStr = new Date(paymentDate as any).toISOString().split('T')[0];
   }
   
   return {
