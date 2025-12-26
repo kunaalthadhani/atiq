@@ -188,14 +188,28 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
   attachments: contract.attachments || [],
 });
 
-const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => ({
-  invoice_id: payment.invoiceId,
-  amount: Math.round(payment.amount * 100) / 100, // Round to 2 decimal places
-  payment_date: payment.paymentDate.toISOString().split('T')[0],
-  payment_method: payment.paymentMethod,
-  reference_number: payment.referenceNumber,
-  notes: payment.notes,
-});
+const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'>) => {
+  // Handle paymentDate as either Date object or string
+  let paymentDateStr: string;
+  if (payment.paymentDate instanceof Date) {
+    paymentDateStr = payment.paymentDate.toISOString().split('T')[0];
+  } else if (typeof payment.paymentDate === 'string') {
+    // If it's already a string, use it directly or convert if needed
+    paymentDateStr = payment.paymentDate.split('T')[0];
+  } else {
+    // Fallback: create new Date
+    paymentDateStr = new Date(payment.paymentDate).toISOString().split('T')[0];
+  }
+  
+  return {
+    invoice_id: payment.invoiceId,
+    amount: Math.round(payment.amount * 100) / 100, // Round to 2 decimal places
+    payment_date: paymentDateStr,
+    payment_method: payment.paymentMethod,
+    reference_number: payment.referenceNumber,
+    notes: payment.notes,
+  };
+};
 
 const mapApprovalRequest = (row: any): ApprovalRequest => ({
   id: row.id,
@@ -1321,18 +1335,30 @@ class SupabaseService {
       });
       
       // Fetch user names
-      const { data: usersData } = await supabase!
+      console.log('Fetching user names for IDs:', Array.from(userIds));
+      const { data: usersData, error: usersError } = await supabase!
         .from('users')
         .select('id, name, email')
         .in('id', Array.from(userIds));
       
+      console.log('Users data fetched:', usersData);
+      console.log('Users error:', usersError);
+      
       const usersMap = new Map((usersData || []).map((u: any) => [u.id, u]));
       
-      return data.map((row: any) => ({
-        ...mapApprovalRequest(row),
-        requesterName: usersMap.get(row.requested_by)?.name,
-        approverName: usersMap.get(row.approved_by)?.name,
-      }));
+      const result = data.map((row: any) => {
+        const requester = usersMap.get(row.requested_by);
+        const approver = usersMap.get(row.approved_by);
+        console.log(`Request ${row.id}: requested_by=${row.requested_by}, requester=${requester?.name || 'NOT FOUND'}`);
+        return {
+          ...mapApprovalRequest(row),
+          requesterName: requester?.name,
+          approverName: approver?.name,
+        };
+      });
+      
+      console.log('Final approval requests with names:', result);
+      return result;
     }
     
     return [];
@@ -1383,7 +1409,14 @@ class SupabaseService {
           break;
           
         case 'payment_create':
-          const paymentResult = await this.createPayment(request.request_data, approverId, 'admin');
+          // Convert paymentDate from string to Date if needed
+          const paymentData = {
+            ...request.request_data,
+            paymentDate: request.request_data.paymentDate instanceof Date 
+              ? request.request_data.paymentDate 
+              : new Date(request.request_data.paymentDate)
+          };
+          const paymentResult = await this.createPayment(paymentData, approverId, 'admin');
           if ('id' in paymentResult) {
             entityId = paymentResult.id;
           } else {
