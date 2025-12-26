@@ -63,6 +63,7 @@ const mapTenant = (row: any): Tenant => ({
   paymentMethod: row.payment_method,
   notificationPreference: row.notification_preference,
   notes: row.notes,
+  approvalStatus: row.approval_status || 'approved', // Default to approved for existing tenants
 });
 
 const mapContract = (row: any): Contract => ({
@@ -151,25 +152,31 @@ const toUnitRow = (unit: Omit<Unit, 'id' | 'createdAt'>) => ({
   notes: unit.notes,
 });
 
-const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'>) => ({
-  first_name: tenant.firstName,
-  last_name: tenant.lastName,
-  email: tenant.email,
-  phone: tenant.phone,
-  secondary_phone: tenant.secondaryPhone,
-  whatsapp_number: tenant.whatsappNumber,
-  secondary_whatsapp_number: tenant.secondaryWhatsappNumber,
-  national_id: tenant.nationalId,
-  emergency_contact: tenant.emergencyContact,
-  emergency_phone: tenant.emergencyPhone,
-  id_type: tenant.idType,
-  id_number: tenant.idNumber,
-  id_expiry_date: tenant.idExpiryDate?.toISOString().split('T')[0],
-  billing_address: tenant.billingAddress,
-  payment_method: tenant.paymentMethod,
-  notification_preference: tenant.notificationPreference,
-  notes: tenant.notes,
-});
+const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_status?: string }) => {
+  const row: any = {
+    first_name: tenant.firstName,
+    last_name: tenant.lastName,
+    email: tenant.email,
+    phone: tenant.phone,
+    secondary_phone: tenant.secondaryPhone,
+    whatsapp_number: tenant.whatsappNumber,
+    secondary_whatsapp_number: tenant.secondaryWhatsappNumber,
+    national_id: tenant.nationalId,
+    emergency_contact: tenant.emergencyContact,
+    emergency_phone: tenant.emergencyPhone,
+    id_type: tenant.idType,
+    id_number: tenant.idNumber,
+    id_expiry_date: tenant.idExpiryDate?.toISOString().split('T')[0],
+    billing_address: tenant.billingAddress,
+    payment_method: tenant.paymentMethod,
+    notification_preference: tenant.notificationPreference,
+    notes: tenant.notes,
+  };
+  if (tenant.approval_status !== undefined) {
+    row.approval_status = tenant.approval_status;
+  }
+  return row;
+};
 
 const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
   tenant_id: contract.tenantId,
@@ -437,15 +444,22 @@ class SupabaseService {
   // ============================================
   // TENANTS
   // ============================================
-  async getTenants(range: { from: number; to: number } = { from: 0, to: 199 }): Promise<Tenant[]> {
+  async getTenants(range: { from: number; to: number } = { from: 0, to: 199 }, userRole?: string): Promise<Tenant[]> {
     if (!this.checkSupabase()) return [];
-    const { data, error } = await supabase!
+    let query = supabase!
       .from('tenants')
       .select(`
         id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
         national_id, emergency_contact, emergency_phone, created_at,
-        id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes
-      `)
+        id_type, id_number, id_expiry_date, billing_address, payment_method, notification_preference, notes, approval_status
+      `);
+    
+    // Non-admin users only see approved tenants (or tenants with null approval_status for backward compatibility)
+    if (userRole !== 'admin') {
+      query = query.or('approval_status.is.null,approval_status.eq.approved');
+    }
+    
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .range(range.from, range.to);
     
@@ -1458,11 +1472,33 @@ class SupabaseService {
     try {
       switch (request.request_type) {
         case 'tenant_create':
-          const tenantResult = await this.createTenant(request.request_data, approverId, 'admin');
-          if ('requiresApproval' in tenantResult) {
-            return { success: false, message: 'Unexpected approval requirement' };
+          // Update existing tenant instead of creating new one
+          const tenantId = request.request_data.tenantId;
+          if (!tenantId) {
+            return { success: false, message: 'Tenant ID not found in request' };
           }
-          entityId = tenantResult.id;
+          
+          // Update tenant with any modifications from admin
+          const tenantUpdateData: any = { ...request.request_data };
+          delete tenantUpdateData.tenantId; // Remove tenantId from update data
+          
+          const updatedTenant = await this.updateTenant(tenantId, tenantUpdateData);
+          if (!updatedTenant) {
+            return { success: false, message: 'Failed to update tenant' };
+          }
+          
+          // Set approval status to approved
+          const { error: updateError } = await supabase!
+            .from('tenants')
+            .update({ approval_status: 'approved' })
+            .eq('id', tenantId);
+          
+          if (updateError) {
+            console.error('Error updating tenant approval status:', updateError);
+            return { success: false, message: 'Failed to approve tenant' };
+          }
+          
+          entityId = tenantId;
           break;
           
         case 'contract_create':
@@ -1535,6 +1571,38 @@ class SupabaseService {
     } catch (error: any) {
       console.error('Error processing approval:', error);
       return { success: false, message: error.message || 'Failed to process approval' };
+    }
+  }
+
+  async updateApprovalRequestData(
+    requestId: string,
+    updatedData: any
+  ): Promise<void> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    
+    // Get current request data
+    const { data: request, error: fetchError } = await supabase!
+      .from('approval_requests')
+      .select('request_data')
+      .eq('id', requestId)
+      .single();
+    
+    if (fetchError || !request) {
+      throw new Error('Request not found');
+    }
+    
+    // Merge updated data with existing request data
+    const mergedData = { ...request.request_data, ...updatedData };
+    
+    // Update the approval request
+    const { error: updateError } = await supabase!
+      .from('approval_requests')
+      .update({ request_data: mergedData })
+      .eq('id', requestId);
+    
+    if (updateError) {
+      console.error('Error updating approval request data:', updateError);
+      throw updateError;
     }
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar, Eye } from 'lucide-react';
+import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar, Eye, Clock } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Tenant } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,7 +54,7 @@ export default function Tenants() {
 
   const loadTenants = async () => {
     try {
-      const data = await dataService.getTenants();
+      const data = await dataService.getTenants({ from: 0, to: 199 }, user?.role);
       setTenants(data);
     } catch (error) {
       console.error('Error loading tenants:', error);
@@ -306,15 +306,23 @@ export default function Tenants() {
                     <h3 className="text-lg font-semibold text-gray-900">
                       {tenant.firstName} {tenant.lastName}
                     </h3>
-                    <span
-                      className={`inline-block mt-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                        status === 'Active'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {status === 'Active' ? 'Active Contract' : 'No Active Contract'}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                          status === 'Active'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {status === 'Active' ? 'Active Contract' : 'No Active Contract'}
+                      </span>
+                      {tenant.approvalStatus === 'pending' && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Pending Approval
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">

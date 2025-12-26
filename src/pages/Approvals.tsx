@@ -366,6 +366,27 @@ export default function Approvals() {
                     </div>
                   </>
                 )}
+                
+                {selectedRequest.requestType === 'tenant_create' && (
+                  <TenantApprovalEditor
+                    request={selectedRequest}
+                    onUpdate={async (updatedData) => {
+                      // Update local state
+                      const updated = {
+                        ...selectedRequest,
+                        requestData: { ...selectedRequest.requestData, ...updatedData }
+                      };
+                      setSelectedRequest(updated);
+                      
+                      // Update approval request in database
+                      try {
+                        await dataService.updateApprovalRequestData(selectedRequest.id, updatedData);
+                      } catch (error) {
+                        console.error('Error updating approval request data:', error);
+                      }
+                    }}
+                  />
+                )}
               </div>
 
               {/* Rejection Reason Input */}
@@ -414,6 +435,225 @@ export default function Approvals() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Tenant Approval Editor Component
+function TenantApprovalEditor({ 
+  request, 
+  onUpdate 
+}: { 
+  request: ApprovalRequestWithDetails; 
+  onUpdate: (data: any) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(request.requestData);
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const updated = { ...editedData, [field]: value };
+    setEditedData(updated);
+    onUpdate(updated);
+  };
+  
+  if (!isEditing) {
+    return (
+      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-blue-900">Tenant Information</h3>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="font-medium text-gray-600">Name:</span>
+            <p className="text-gray-900 font-semibold">
+              {editedData.firstName} {editedData.lastName}
+            </p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Email:</span>
+            <p className="text-gray-900">{editedData.email}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Phone:</span>
+            <p className="text-gray-900">{editedData.phone}</p>
+          </div>
+          {editedData.secondaryPhone && (
+            <div>
+              <span className="font-medium text-gray-600">Secondary Phone:</span>
+              <p className="text-gray-900">{editedData.secondaryPhone}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-gray-600">WhatsApp:</span>
+            <p className="text-gray-900">{editedData.whatsappNumber}</p>
+          </div>
+          {editedData.secondaryWhatsappNumber && (
+            <div>
+              <span className="font-medium text-gray-600">Secondary WhatsApp:</span>
+              <p className="text-gray-900">{editedData.secondaryWhatsappNumber}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-gray-600">National ID:</span>
+            <p className="text-gray-900">{editedData.nationalId}</p>
+          </div>
+          {editedData.idType && (
+            <div>
+              <span className="font-medium text-gray-600">ID Type:</span>
+              <p className="text-gray-900 capitalize">{editedData.idType.replace('_', ' ')}</p>
+            </div>
+          )}
+          {editedData.idNumber && (
+            <div>
+              <span className="font-medium text-gray-600">ID Number:</span>
+              <p className="text-gray-900">{editedData.idNumber}</p>
+            </div>
+          )}
+          {editedData.idExpiryDate && (
+            <div>
+              <span className="font-medium text-gray-600">ID Expiry Date:</span>
+              <p className="text-gray-900">{formatDate(new Date(editedData.idExpiryDate))}</p>
+            </div>
+          )}
+          <div>
+            <span className="font-medium text-gray-600">Emergency Contact:</span>
+            <p className="text-gray-900">{editedData.emergencyContact}</p>
+          </div>
+          <div>
+            <span className="font-medium text-gray-600">Emergency Phone:</span>
+            <p className="text-gray-900">{editedData.emergencyPhone}</p>
+          </div>
+          {editedData.billingAddress && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Billing Address:</span>
+              <p className="text-gray-900">{editedData.billingAddress}</p>
+            </div>
+          )}
+          {editedData.paymentMethod && (
+            <div>
+              <span className="font-medium text-gray-600">Payment Method:</span>
+              <p className="text-gray-900 capitalize">{editedData.paymentMethod.replace('_', ' ')}</p>
+            </div>
+          )}
+          {editedData.notificationPreference && (
+            <div>
+              <span className="font-medium text-gray-600">Notification Preference:</span>
+              <p className="text-gray-900 capitalize">{editedData.notificationPreference}</p>
+            </div>
+          )}
+          {editedData.notes && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-600">Notes:</span>
+              <p className="text-gray-700 mt-1 whitespace-pre-wrap">{editedData.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-blue-900">Edit Tenant Information</h3>
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Cancel Edit
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">First Name</label>
+          <input
+            type="text"
+            value={editedData.firstName || ''}
+            onChange={(e) => handleFieldChange('firstName', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Last Name</label>
+          <input
+            type="text"
+            value={editedData.lastName || ''}
+            onChange={(e) => handleFieldChange('lastName', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+          <input
+            type="email"
+            value={editedData.email || ''}
+            onChange={(e) => handleFieldChange('email', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+          <input
+            type="text"
+            value={editedData.phone || ''}
+            onChange={(e) => handleFieldChange('phone', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">WhatsApp</label>
+          <input
+            type="text"
+            value={editedData.whatsappNumber || ''}
+            onChange={(e) => handleFieldChange('whatsappNumber', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">National ID</label>
+          <input
+            type="text"
+            value={editedData.nationalId || ''}
+            onChange={(e) => handleFieldChange('nationalId', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Emergency Contact</label>
+          <input
+            type="text"
+            value={editedData.emergencyContact || ''}
+            onChange={(e) => handleFieldChange('emergencyContact', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Emergency Phone</label>
+          <input
+            type="text"
+            value={editedData.emergencyPhone || ''}
+            onChange={(e) => handleFieldChange('emergencyPhone', e.target.value)}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        {editedData.notes !== undefined && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editedData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              rows={3}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

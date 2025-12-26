@@ -54,6 +54,7 @@ export interface Tenant {
   paymentMethod?: 'bank_transfer' | 'card' | 'cash' | 'cheque';
   notificationPreference?: 'whatsapp' | 'email';
   notes?: string;
+  approvalStatus?: 'pending' | 'approved' | 'rejected'; // Approval status for non-admin created tenants
 }
 
 export type ContractStatus = 'active' | 'expired' | 'terminated' | 'draft';

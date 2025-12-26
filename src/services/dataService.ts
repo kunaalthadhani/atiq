@@ -54,7 +54,7 @@ class LocalStorageService {
     return this.loadFromStorage<Unit>('units');
   }
 
-  async getTenants(): Promise<Tenant[]> {
+  async getTenants(range?: { from: number; to: number }, userRole?: string): Promise<Tenant[]> {
     return this.loadFromStorage<Tenant>('tenants');
   }
 
@@ -510,6 +510,15 @@ class LocalStorageService {
     const _unused = { _requestId, _approverId };
     void _unused;
     return { success: false, message: 'Approval system requires Supabase' };
+  }
+
+  async updateApprovalRequestData(
+    _requestId: string,
+    _updatedData: any
+  ): Promise<void> {
+    // Parameters required for interface compatibility with supabaseService
+    const _unused = { _requestId, _updatedData };
+    void _unused;
   }
 
   async rejectRequest(
