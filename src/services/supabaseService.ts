@@ -303,26 +303,24 @@ class SupabaseService {
     // Non-admin users see approved properties and their own pending properties
     if (userRole !== 'admin') {
       // Fetch approved properties (or null status for backward compatibility)
-      const approvedQuery = supabase!
+      const approvedResult = await supabase!
         .from('properties')
         .select('*')
         .or('approval_status.is.null,approval_status.eq.approved')
         .order('created_at', { ascending: false });
       
-      let queries: Promise<any>[] = [approvedQuery];
-      
       // If there are pending properties, fetch them separately
+      let pendingResult: any = { data: null, error: null };
       if (pendingPropertyIds.length > 0) {
-        const pendingQuery = supabase!
+        pendingResult = await supabase!
           .from('properties')
           .select('*')
           .eq('approval_status', 'pending')
           .in('id', pendingPropertyIds)
           .order('created_at', { ascending: false });
-        queries.push(pendingQuery);
       }
       
-      const results = await Promise.all(queries);
+      const results = [approvedResult, pendingResult];
       const approvedResult = results[0];
       const pendingResult = results[1];
       
