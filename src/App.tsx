@@ -12,12 +12,15 @@ import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Calendar from './pages/Calendar';
 import Approvals from './pages/Approvals';
+import PasswordManagement from './pages/PasswordManagement';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
@@ -29,6 +32,7 @@ function App() {
           <Route path="payments" element={<Payments />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="approvals" element={<Approvals />} />
+          <Route path="password" element={<PasswordManagement />} />
         </Route>
       </Routes>
     </AuthProvider>

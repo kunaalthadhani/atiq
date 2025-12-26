@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
-  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle
+  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Reminder } from '@/types';
@@ -109,6 +109,18 @@ export default function Layout() {
                 <div className="text-gray-500">{user.email}</div>
               </div>
             )}
+            <Link
+              to="/password"
+              className={cn(
+                'w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors',
+                location.pathname === '/password'
+                  ? 'bg-green-50 text-green-700'
+                  : 'text-gray-700 hover:bg-gray-50'
+              )}
+            >
+              <Key className="w-4 h-4 mr-3" />
+              Password
+            </Link>
             <button
               onClick={async () => {
                 await logout();
