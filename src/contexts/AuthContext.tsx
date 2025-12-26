@@ -39,6 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single();
           
           if (userData && !error) {
+            console.log('=== USER DATA LOADED ===');
+            console.log('User data from database:', userData);
+            console.log('Role value:', userData.role);
+            console.log('Role type:', typeof userData.role);
+            console.log('Is admin?', userData.role === 'admin');
+            console.log('========================');
+            
             setUser({
               id: userData.id,
               email: userData.email,

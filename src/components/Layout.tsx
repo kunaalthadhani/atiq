@@ -77,6 +77,17 @@ export default function Layout() {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
+              // Debug: Log user role
+              if (item.adminOnly) {
+                console.log('Checking Approvals access:', {
+                  user: user,
+                  role: user?.role,
+                  isAdmin: user?.role === 'admin',
+                  roleType: typeof user?.role,
+                  roleValue: JSON.stringify(user?.role)
+                });
+              }
+              
               // Hide admin-only items for non-admin users
               if (item.adminOnly && user?.role !== 'admin') {
                 return null;
