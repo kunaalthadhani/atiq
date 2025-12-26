@@ -390,7 +390,17 @@ Unit: ${invoice.unit.unitNumber}`;
             return dateB - dateA;
           });
           
-          return allPayments.length > 0 ? allPayments.map((item, index) => {
+          if (allPayments.length === 0) {
+            return (
+              <div className="py-10 text-center text-sm text-gray-600">
+                {searchQuery
+                  ? 'No payments match your search.'
+                  : 'Payment records will appear here'}
+              </div>
+            );
+          }
+          
+          return allPayments.map((item, index) => {
             const { type, data, invoice } = item;
             if (!invoice) return null;
             
@@ -507,14 +517,8 @@ Unit: ${invoice.unit.unitNumber}`;
                 </div>
               </div>
             );
-          })
-        ) : (
-          <div className="py-10 text-center text-sm text-gray-600">
-            {searchQuery
-              ? 'No payments match your search.'
-              : 'Payment records will appear here'}
-          </div>
-        )}
+          });
+        })()}
       </div>
 
       {/* Add Payment Form Modal */}
