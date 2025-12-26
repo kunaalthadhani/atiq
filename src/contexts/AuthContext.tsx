@@ -82,7 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq('id', data.user.id)
             .single();
 
-          if (userData && !userError) {
+          // Add detailed logging
+          console.log('=== USER QUERY DEBUG ===');
+          console.log('User ID from auth:', data.user.id);
+          console.log('User email from auth:', data.user.email);
+          console.log('Query result - userData:', userData);
+          console.log('Query result - userError:', userError);
+          if (userError) {
+            console.log('Error code:', userError.code);
+            console.log('Error message:', userError.message);
+            console.log('Error details:', JSON.stringify(userError, null, 2));
+          }
+          console.log('========================');
+
+          if (userError) {
+            // Show the actual error message
+            return { 
+              success: false, 
+              error: `Database error: ${userError.message || 'Unknown error'}. Code: ${userError.code || 'N/A'}` 
+            };
+          }
+
+          if (userData) {
             const userObj = {
               id: userData.id,
               email: userData.email,
