@@ -496,10 +496,15 @@ class SupabaseService {
   async getUnits(propertyId?: string, userRole?: string, userId?: string): Promise<Unit[]> {
     if (!this.checkSupabase()) return [];
     
+    const trimmedRole = userRole?.trim();
     let pendingUnitIds: string[] = [];
-    if (userRole !== 'admin' && userId) {
+    if (trimmedRole !== 'admin' && userId) {
       try {
-        const { data: approvalRequests } = await supabase!
+        console.log('=== FETCHING PENDING UNIT APPROVAL REQUESTS ===');
+        console.log('User ID:', userId);
+        console.log('User Role:', userRole);
+        
+        const { data: approvalRequests, error: approvalError } = await supabase!
           .from('approval_requests')
           .select('entity_id, request_data')
           .eq('request_type', 'unit_create')
@@ -507,18 +512,29 @@ class SupabaseService {
           .eq('requested_by', userId)
           .eq('status', 'pending');
 
+        console.log('Approval requests found:', approvalRequests?.length || 0);
+        console.log('Approval requests:', approvalRequests);
+        console.log('Approval error:', approvalError);
+
         if (approvalRequests) {
           pendingUnitIds = approvalRequests
-            .map(req => req.entity_id || req.request_data?.unitId)
+            .map(req => {
+              const id = req.entity_id || req.request_data?.unitId;
+              console.log('Processing request:', { entity_id: req.entity_id, unitId: req.request_data?.unitId, finalId: id });
+              return id;
+            })
             .filter((id): id is string => !!id);
+          
+          console.log('Pending Unit IDs extracted:', pendingUnitIds);
         }
+        console.log('===============================================');
       } catch (error) {
         console.error('Error fetching pending unit approval requests:', error);
       }
     }
     
     // Non-admin users see approved units and their own pending units
-    if (userRole !== 'admin') {
+    if (trimmedRole !== 'admin') {
       // Fetch approved units (or null status for backward compatibility)
       let approvedQuery = supabase!
         .from('units')
@@ -631,10 +647,19 @@ class SupabaseService {
   ): Promise<Unit | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
     
+    console.log('=== CREATING UNIT ===');
+    console.log('User ID:', userId);
+    console.log('User Role:', userRole);
+    console.log('Unit data:', unit);
+    
     // Always create the unit, but set approval_status based on user role
     const unitRow = toUnitRow(unit);
-    const approvalStatus = userRole === 'admin' ? 'approved' : 'pending';
+    const trimmedRole = userRole?.trim();
+    const approvalStatus = trimmedRole === 'admin' ? 'approved' : 'pending';
     unitRow.approval_status = approvalStatus;
+    
+    console.log('Unit row to insert:', unitRow);
+    console.log('Approval status:', approvalStatus);
     
     const { data, error } = await supabase!
       .from('units')
@@ -647,22 +672,37 @@ class SupabaseService {
       throw error;
     }
     
+    console.log('Unit created successfully:', data);
+    console.log('Unit approval_status in DB:', data.approval_status);
+    
     const createdUnit = mapUnit(data);
+    console.log('Mapped unit approvalStatus:', createdUnit.approvalStatus);
     
     // If user is not admin, create approval request
-    if (userRole !== 'admin' && userId) {
+    if (trimmedRole !== 'admin' && userId) {
       try {
+        console.log('Creating approval request for unit:', createdUnit.id);
         const approvalRequest = await this.createApprovalRequest(
           'unit_create',
           'unit',
           { unitId: createdUnit.id, ...unit }, // Include unitId in request data
           userId
         );
+        console.log('Approval request created:', approvalRequest);
+        
         // Update the approval request with entity_id for easier querying
-        await supabase!
+        const { error: updateError } = await supabase!
           .from('approval_requests')
           .update({ entity_id: createdUnit.id })
           .eq('id', approvalRequest.id);
+        
+        if (updateError) {
+          console.error('Error updating approval request entity_id:', updateError);
+        } else {
+          console.log('Approval request entity_id updated successfully');
+        }
+        
+        console.log('=== UNIT CREATION COMPLETE ===');
         return {
           requiresApproval: true,
           approvalRequestId: approvalRequest.id,

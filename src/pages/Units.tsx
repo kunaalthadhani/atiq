@@ -22,7 +22,7 @@ export default function Units() {
   const loadData = async () => {
     try {
       const unitsData = await dataService.getUnits(undefined, user?.role, user?.id);
-      const propertiesData = await dataService.getProperties(user?.role);
+      const propertiesData = await dataService.getProperties(user?.role, user?.id);
       setUnits(unitsData);
       setProperties(propertiesData);
     } catch (error) {
