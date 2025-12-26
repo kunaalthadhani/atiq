@@ -279,8 +279,9 @@ class SupabaseService {
   async getProperties(userRole?: string, userId?: string): Promise<Property[]> {
     if (!this.checkSupabase()) return [];
     
+    const trimmedRole = userRole?.trim();
     let pendingPropertyIds: string[] = [];
-    if (userRole !== 'admin' && userId) {
+    if (trimmedRole !== 'admin' && userId) {
       try {
         const { data: approvalRequests } = await supabase!
           .from('approval_requests')
@@ -301,13 +302,20 @@ class SupabaseService {
     }
     
     // Non-admin users see approved properties and their own pending properties
-    if (userRole !== 'admin') {
-      // Fetch approved properties (or null status for backward compatibility)
-      const approvedResult = await supabase!
+    if (trimmedRole !== 'admin') {
+      // Fetch all properties first, then filter in memory
+      const allPropertiesResult = await supabase!
         .from('properties')
         .select('*')
-        .or('approval_status.is.null,approval_status.eq.approved')
         .order('created_at', { ascending: false });
+      
+      // Filter approved properties (null or 'approved' status)
+      const approvedResult = {
+        data: allPropertiesResult.data?.filter((p: any) => 
+          !p.approval_status || p.approval_status === 'approved'
+        ) || null,
+        error: allPropertiesResult.error
+      };
       
       // If there are pending properties, fetch them separately
       let pendingResult: any = { data: null, error: null };
@@ -536,17 +544,23 @@ class SupabaseService {
     // Non-admin users see approved units and their own pending units
     if (trimmedRole !== 'admin') {
       // Fetch approved units (or null status for backward compatibility)
+      // Use a simpler approach: fetch all, then filter in memory if needed
       let approvedQuery = supabase!
         .from('units')
-        .select('*')
-        .or('approval_status.is.null,approval_status.eq.approved')
-        .order('created_at', { ascending: false });
+        .select('*');
       
       if (propertyId) {
         approvedQuery = approvedQuery.eq('property_id', propertyId);
       }
       
-      const approvedResult = await approvedQuery;
+      const approvedResult = await approvedQuery.order('created_at', { ascending: false });
+      
+      // Filter approved units in memory (null or 'approved' status)
+      if (approvedResult.data) {
+        approvedResult.data = approvedResult.data.filter((u: any) => 
+          !u.approval_status || u.approval_status === 'approved'
+        );
+      }
       
       // If there are pending units, fetch them separately
       let pendingResult: any = { data: null, error: null };
