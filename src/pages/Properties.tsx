@@ -26,7 +26,7 @@ export default function Properties() {
 
   useEffect(() => {
     loadProperties();
-  }, []);
+  }, [user]);
 
   const loadProperties = async () => {
     try {

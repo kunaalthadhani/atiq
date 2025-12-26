@@ -25,7 +25,7 @@ const mapProperty = (row: any): Property => ({
   postalCode: row.postal_code,
   notes: row.notes,
   isActive: row.is_active ?? true,
-  approvalStatus: row.approval_status || 'approved', // Default to approved for existing properties
+  approvalStatus: row.approval_status === 'pending' ? 'pending' : (row.approval_status === 'rejected' ? 'rejected' : (row.approval_status || 'approved')), // Preserve pending/rejected status
 });
 
 const mapUnit = (row: any): Unit => ({
@@ -300,21 +300,77 @@ class SupabaseService {
       }
     }
     
-    let query = supabase!
-      .from('properties')
-      .select('*');
-    
     // Non-admin users see approved properties and their own pending properties
     if (userRole !== 'admin') {
+      // Fetch approved properties (or null status for backward compatibility)
+      const approvedQuery = supabase!
+        .from('properties')
+        .select('*')
+        .or('approval_status.is.null,approval_status.eq.approved')
+        .order('created_at', { ascending: false });
+      
+      let queries: Promise<any>[] = [approvedQuery];
+      
+      // If there are pending properties, fetch them separately
       if (pendingPropertyIds.length > 0) {
-        const idFilter = pendingPropertyIds.map(id => `'${id}'`).join(',');
-        query = query.or(`approval_status.is.null,approval_status.eq.approved,and(approval_status.eq.pending,id.in.(${idFilter}))`);
-      } else {
-        query = query.or('approval_status.is.null,approval_status.eq.approved');
+        const pendingQuery = supabase!
+          .from('properties')
+          .select('*')
+          .eq('approval_status', 'pending')
+          .in('id', pendingPropertyIds)
+          .order('created_at', { ascending: false });
+        queries.push(pendingQuery);
       }
+      
+      const results = await Promise.all(queries);
+      const approvedResult = results[0];
+      const pendingResult = results[1];
+      
+      // Debug logging
+      console.log('=== PROPERTIES FETCH DEBUG ===');
+      console.log('User ID:', userId);
+      console.log('User Role:', userRole);
+      console.log('Pending Property IDs:', pendingPropertyIds);
+      console.log('Approved properties:', approvedResult.data?.length || 0);
+      console.log('Pending properties:', pendingResult?.data?.length || 0);
+      if (approvedResult.data) {
+        approvedResult.data.forEach((p: any) => {
+          console.log(`Approved Property ${p.name}: approval_status=${p.approval_status}, id=${p.id}`);
+        });
+      }
+      if (pendingResult?.data) {
+        pendingResult.data.forEach((p: any) => {
+          console.log(`Pending Property ${p.name}: approval_status=${p.approval_status}, id=${p.id}`);
+        });
+      }
+      console.log('Approved Error:', approvedResult.error);
+      console.log('Pending Error:', pendingResult?.error);
+      console.log('=============================');
+      
+      if (approvedResult.error) {
+        console.error('Error fetching approved properties:', approvedResult.error);
+        return [];
+      }
+      
+      // Combine and deduplicate
+      const allProperties = [
+        ...(approvedResult.data || []),
+        ...(pendingResult?.data || [])
+      ];
+      
+      // Remove duplicates by ID
+      const uniqueProperties = Array.from(
+        new Map(allProperties.map((p: any) => [p.id, p])).values()
+      );
+      
+      return uniqueProperties.map(mapProperty);
     }
     
-    const { data, error } = await query.order('created_at', { ascending: false });
+    // Admin sees all properties
+    const { data, error } = await supabase!
+      .from('properties')
+      .select('*')
+      .order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching properties:', error);
