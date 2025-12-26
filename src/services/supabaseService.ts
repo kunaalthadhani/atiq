@@ -42,7 +42,7 @@ const mapUnit = (row: any): Unit => ({
   images: row.images || [],
   notes: row.notes,
   createdAt: new Date(row.created_at),
-  approvalStatus: row.approval_status || 'approved', // Default to approved for existing units
+  approvalStatus: row.approval_status === 'pending' ? 'pending' : (row.approval_status === 'rejected' ? 'rejected' : (row.approval_status || 'approved')), // Preserve pending/rejected status
 });
 
 const mapTenant = (row: any): Tenant => ({
@@ -517,25 +517,88 @@ class SupabaseService {
       }
     }
     
-    let query = supabase!
+    // Non-admin users see approved units and their own pending units
+    if (userRole !== 'admin') {
+      // Fetch approved units (or null status for backward compatibility)
+      let approvedQuery = supabase!
+        .from('units')
+        .select('*')
+        .or('approval_status.is.null,approval_status.eq.approved')
+        .order('created_at', { ascending: false });
+      
+      if (propertyId) {
+        approvedQuery = approvedQuery.eq('property_id', propertyId);
+      }
+      
+      const approvedResult = await approvedQuery;
+      
+      // If there are pending units, fetch them separately
+      let pendingResult: any = { data: null, error: null };
+      if (pendingUnitIds.length > 0) {
+        let pendingQuery = supabase!
+          .from('units')
+          .select('*')
+          .eq('approval_status', 'pending')
+          .in('id', pendingUnitIds)
+          .order('created_at', { ascending: false });
+        
+        if (propertyId) {
+          pendingQuery = pendingQuery.eq('property_id', propertyId);
+        }
+        
+        pendingResult = await pendingQuery;
+      }
+      
+      // Debug logging
+      console.log('=== UNITS FETCH DEBUG ===');
+      console.log('User ID:', userId);
+      console.log('User Role:', userRole);
+      console.log('Pending Unit IDs:', pendingUnitIds);
+      console.log('Approved units:', approvedResult.data?.length || 0);
+      console.log('Pending units:', pendingResult?.data?.length || 0);
+      if (approvedResult.data) {
+        approvedResult.data.forEach((u: any) => {
+          console.log(`Approved Unit ${u.unit_number}: approval_status=${u.approval_status}, id=${u.id}`);
+        });
+      }
+      if (pendingResult?.data) {
+        pendingResult.data.forEach((u: any) => {
+          console.log(`Pending Unit ${u.unit_number}: approval_status=${u.approval_status}, id=${u.id}`);
+        });
+      }
+      console.log('Approved Error:', approvedResult.error);
+      console.log('Pending Error:', pendingResult?.error);
+      console.log('==========================');
+      
+      if (approvedResult.error) {
+        console.error('Error fetching approved units:', approvedResult.error);
+        return [];
+      }
+      
+      // Combine and deduplicate
+      const allUnits = [
+        ...(approvedResult.data || []),
+        ...(pendingResult?.data || [])
+      ];
+      
+      // Remove duplicates by ID
+      const uniqueUnits = Array.from(
+        new Map(allUnits.map((u: any) => [u.id, u])).values()
+      );
+      
+      return uniqueUnits.map(mapUnit);
+    }
+    
+    // Admin sees all units
+    let adminQuery = supabase!
       .from('units')
       .select('*');
     
     if (propertyId) {
-      query = query.eq('property_id', propertyId);
+      adminQuery = adminQuery.eq('property_id', propertyId);
     }
     
-    // Non-admin users see approved units and their own pending units
-    if (userRole !== 'admin') {
-      if (pendingUnitIds.length > 0) {
-        const idFilter = pendingUnitIds.map(id => `'${id}'`).join(',');
-        query = query.or(`approval_status.is.null,approval_status.eq.approved,and(approval_status.eq.pending,id.in.(${idFilter}))`);
-      } else {
-        query = query.or('approval_status.is.null,approval_status.eq.approved');
-      }
-    }
-    
-    const { data, error } = await query.order('created_at', { ascending: false });
+    const { data, error } = await adminQuery.order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching units:', error);
@@ -595,6 +658,11 @@ class SupabaseService {
           { unitId: createdUnit.id, ...unit }, // Include unitId in request data
           userId
         );
+        // Update the approval request with entity_id for easier querying
+        await supabase!
+          .from('approval_requests')
+          .update({ entity_id: createdUnit.id })
+          .eq('id', approvalRequest.id);
         return {
           requiresApproval: true,
           approvalRequestId: approvalRequest.id,
