@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
-  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key
+  Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key, ShieldCheck
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Reminder } from '@/types';
@@ -88,8 +88,8 @@ export default function Layout() {
                 });
               }
               
-              // Hide admin-only items for non-admin users
-              if (item.adminOnly && user?.role !== 'admin') {
+              // Hide admin-only items for non-admin users (trim role to handle whitespace)
+              if (item.adminOnly && user?.role?.trim() !== 'admin') {
                 return null;
               }
               

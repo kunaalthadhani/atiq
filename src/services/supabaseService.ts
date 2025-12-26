@@ -1297,10 +1297,11 @@ class SupabaseService {
     console.log('Status filter:', status);
     console.log('User ID filter:', userId);
     
-    // First, try a simple query without joins to see if RLS is the issue
+    // Explicitly select only the columns we need - no joins, no relationships
+    // This prevents Supabase from trying to infer relationships
     let query = supabase!
       .from('approval_requests')
-      .select('*')
+      .select('id, request_type, requested_by, approved_by, status, entity_type, entity_id, request_data, rejection_reason, created_at, updated_at, approved_at')
       .order('created_at', { ascending: false });
     
     if (status) {

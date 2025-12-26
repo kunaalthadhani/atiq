@@ -13,11 +13,14 @@ export default function Approvals() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Check if user is admin (with trimming to handle whitespace issues)
+  const isAdmin = user?.role?.trim() === 'admin';
+
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (isAdmin) {
       loadRequests();
     }
-  }, [user, filter]);
+  }, [user, filter, isAdmin]);
 
   const loadRequests = async () => {
     try {
@@ -115,7 +118,7 @@ export default function Approvals() {
     }
   };
 
-  if (user?.role !== 'admin') {
+  if (!isAdmin) {
     return (
       <div className="p-8">
         <div className="text-center text-gray-600">
