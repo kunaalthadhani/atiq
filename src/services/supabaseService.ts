@@ -1230,16 +1230,16 @@ class SupabaseService {
     // 4 Payments = quarterly (3 months each)
     if (contract.paymentFrequency === '1_payment') {
       intervalMonths = 12; // Annually
-      amountPerInstallment = totalContractValue;
+      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
     } else if (contract.paymentFrequency === '2_payment') {
       intervalMonths = 6; // Semi-annually
-      amountPerInstallment = totalContractValue / 2;
+      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
     } else if (contract.paymentFrequency === '3_payment') {
       intervalMonths = 4; // Every 4 months
-      amountPerInstallment = totalContractValue / 3;
+      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3; // Quarterly
-      amountPerInstallment = totalContractValue / 4;
+      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
     }
 
     const invoices = [];
@@ -1252,14 +1252,17 @@ class SupabaseService {
       
       const invoiceNumber = `INV-${contract.id.slice(-4).toUpperCase()}-${String(i + 1).padStart(3, '0')}`;
       
+      // Round amount to 2 decimal places to avoid floating-point precision issues
+      const roundedAmount = Math.round(amountPerInstallment * 100) / 100;
+      
       invoices.push({
         contract_id: contract.id,
         invoice_number: invoiceNumber,
         installment_number: i + 1,
         due_date: dueDate.toISOString().split('T')[0],
-        amount: amountPerInstallment,
+        amount: roundedAmount,
         paid_amount: 0,
-        remaining_amount: amountPerInstallment,
+        remaining_amount: roundedAmount,
         status: 'pending',
       });
     }

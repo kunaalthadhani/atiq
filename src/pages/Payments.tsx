@@ -586,7 +586,7 @@ Unit: ${invoice.unit.unitNumber}`;
                   required
                   min="0.01"
                   step="0.01"
-                  defaultValue={selectedInvoice ? Math.round(selectedInvoice.remainingAmount * 100) / 100 : ''}
+                  defaultValue={selectedInvoice ? Math.round(selectedInvoice.amount * 100) / 100 : ''}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>
