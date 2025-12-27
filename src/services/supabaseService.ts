@@ -232,6 +232,12 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => {
 
 // Normalize contract data from JSONB (converts string dates to Date objects)
 function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt'> {
+  // Validate payment frequency
+  const validPaymentFrequencies = ['1_payment', '2_payment', '3_payment', '4_payment'];
+  const paymentFrequency = validPaymentFrequencies.includes(data.paymentFrequency) 
+    ? data.paymentFrequency 
+    : '4_payment'; // Default to 4_payment if invalid
+  
   return {
     tenantId: data.tenantId,
     unitId: data.unitId,
@@ -244,7 +250,7 @@ function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt
       : new Date(data.endDate),
     monthlyRent: data.monthlyRent,
     securityDeposit: data.securityDeposit,
-    paymentFrequency: data.paymentFrequency,
+    paymentFrequency: paymentFrequency as '1_payment' | '2_payment' | '3_payment' | '4_payment',
     numberOfInstallments: data.numberOfInstallments,
     status: data.status,
     reminderPeriod: data.reminderPeriod,
