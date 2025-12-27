@@ -5,8 +5,8 @@ import {
   Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key
 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
-import { Reminder } from '@/types';
-import { cn } from '@/lib/utils';
+import { Reminder, ApprovalRequestWithDetails } from '@/types';
+import { cn, formatDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import SupabaseWarning from './SupabaseWarning';
 
@@ -26,12 +26,23 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
+  
+  const isAdmin = user?.role?.trim() === 'admin';
 
   useEffect(() => {
     loadReminders();
-    const interval = setInterval(loadReminders, 60000); // Check every minute
+    if (isAdmin) {
+      loadPendingApprovals();
+    }
+    const interval = setInterval(() => {
+      loadReminders();
+      if (isAdmin) {
+        loadPendingApprovals();
+      }
+    }, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, []);
+  }, [isAdmin]);
 
   const loadReminders = async () => {
     try {
@@ -51,6 +62,16 @@ export default function Layout() {
     }
   };
 
+  const loadPendingApprovals = async () => {
+    try {
+      const approvals = await dataService.getApprovalRequests('pending', undefined);
+      setPendingApprovals(approvals);
+    } catch (error) {
+      console.error('Error loading pending approvals:', error);
+      setPendingApprovals([]);
+    }
+  };
+
   const dismissReminder = async (id: string) => {
     try {
       await dataService.dismissReminder(id);
@@ -58,6 +79,19 @@ export default function Layout() {
     } catch (error) {
       console.error('Error dismissing reminder:', error);
     }
+  };
+
+  const getApprovalTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'contract_create': 'Create Contract',
+      'contract_terminate': 'Terminate Contract',
+      'contract_cancel': 'Cancel Contract',
+      'payment_create': 'Create Payment',
+      'payment_delete': 'Delete Payment',
+      'tenant_create': 'Create Tenant',
+      'property_create': 'Create Property',
+    };
+    return labels[type] || type;
   };
 
   return (
@@ -148,35 +182,73 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="pl-64">
-        {/* Persistent reminders */}
-        {reminders.length > 0 && (
-          <div className="fixed top-4 right-4 z-50 w-96 max-h-[80vh] overflow-y-auto space-y-2">
-            {reminders.map((reminder) => (
-              <div
-                key={reminder.id}
-                className="bg-warning-50 border-l-4 border-warning-500 p-4 rounded-lg shadow-lg animate-pulse"
-              >
-                <div className="flex items-start">
-                  <Bell className="w-5 h-5 text-warning-600 mt-0.5 mr-3 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-warning-900">
-                      Payment Reminder
-                    </p>
-                    <p className="text-sm text-warning-700 mt-1">
-                      {reminder.message}
-                    </p>
+        {/* Persistent notifications */}
+        <div className="fixed top-4 right-4 z-50 w-96 max-h-[80vh] overflow-y-auto space-y-2">
+          {/* Pending Approvals Notifications (Admin Only) */}
+          {isAdmin && pendingApprovals.length > 0 && (
+            <>
+              {pendingApprovals.map((approval) => (
+                <div
+                  key={approval.id}
+                  className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg shadow-lg animate-pulse"
+                >
+                  <div className="flex items-start">
+                    <CheckCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-yellow-900">
+                        Pending Approval Required
+                      </p>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        <span className="font-semibold">{getApprovalTypeLabel(approval.requestType)}</span>
+                        {' '}requested by {approval.requesterName || 'Unknown'}
+                      </p>
+                      <p className="text-xs text-yellow-600 mt-1">
+                        {formatDate(approval.createdAt)}
+                      </p>
+                    </div>
+                    <Link
+                      to="/approvals"
+                      className="ml-3 flex-shrink-0 text-yellow-600 hover:text-yellow-900"
+                      title="Go to Approvals"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                    </Link>
                   </div>
-                  <button
-                    onClick={() => dismissReminder(reminder.id)}
-                    className="ml-3 flex-shrink-0 text-warning-600 hover:text-warning-900"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </>
+          )}
+
+          {/* Payment Reminders */}
+          {reminders.length > 0 && (
+            <>
+              {reminders.map((reminder) => (
+                <div
+                  key={reminder.id}
+                  className="bg-warning-50 border-l-4 border-warning-500 p-4 rounded-lg shadow-lg animate-pulse"
+                >
+                  <div className="flex items-start">
+                    <Bell className="w-5 h-5 text-warning-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-warning-900">
+                        Payment Reminder
+                      </p>
+                      <p className="text-sm text-warning-700 mt-1">
+                        {reminder.message}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => dismissReminder(reminder.id)}
+                      className="ml-3 flex-shrink-0 text-warning-600 hover:text-warning-900"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
 
         <main className="min-h-screen">
           <Outlet />

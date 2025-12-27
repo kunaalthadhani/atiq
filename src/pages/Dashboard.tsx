@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2, Home, Users, FileText, TrendingUp,
-  AlertCircle, Wallet, Calendar, Receipt, BarChart as BarChartIcon, PieChart as PieChartIcon, Filter
+  AlertCircle, Wallet, Calendar, Receipt, BarChart as BarChartIcon, PieChart as PieChartIcon, Filter, CheckCircle
 } from 'lucide-react';
 import { subMonths, startOfMonth, endOfMonth, format, isWithinInterval } from 'date-fns';
 import {
@@ -10,22 +10,27 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { dataService } from '@/services/dataService';
-import { DashboardStats, InvoiceWithDetails, Property, Unit } from '@/types';
+import { DashboardStats, InvoiceWithDetails, Property, Unit, ApprovalRequestWithDetails } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [overdueInvoices, setOverdueInvoices] = useState<InvoiceWithDetails[]>([]);
   const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
   const [dateFilter, setDateFilter] = useState<'last_month' | 'last_3_months' | 'last_6_months' | 'past_year' | 'custom'>('last_month');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  
+  const isAdmin = user?.role?.trim() === 'admin';
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [isAdmin]);
 
   // Calculate date range based on filter
   const getDateRange = () => {
@@ -82,6 +87,17 @@ export default function Dashboard() {
       setInvoices(allInvoices);
       setProperties(allProperties);
       setUnits(allUnits);
+      
+      // Load pending approvals for admin users
+      if (isAdmin) {
+        try {
+          const approvals = await dataService.getApprovalRequests('pending', undefined);
+          setPendingApprovals(approvals);
+        } catch (error) {
+          console.error('Error loading pending approvals:', error);
+          setPendingApprovals([]);
+        }
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
@@ -251,6 +267,58 @@ export default function Dashboard() {
           <span>Calendar</span>
         </Link>
       </div>
+
+      {/* Pending Approvals Alert (Admin Only) */}
+      {isAdmin && pendingApprovals.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 mb-5">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start">
+              <CheckCircle className="w-5 h-5 text-yellow-600 mr-3 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-yellow-900 text-base mb-1">
+                  {pendingApprovals.length} Pending Approval{pendingApprovals.length !== 1 ? 's' : ''} Require Your Attention
+                </h3>
+                <p className="text-yellow-800 text-sm mb-3">
+                  Action required: Review and approve or reject pending requests
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {pendingApprovals.slice(0, 3).map((approval) => {
+                    const getTypeLabel = (type: string) => {
+                      const labels: Record<string, string> = {
+                        'contract_create': 'Create Contract',
+                        'contract_terminate': 'Terminate Contract',
+                        'contract_cancel': 'Cancel Contract',
+                        'payment_create': 'Create Payment',
+                        'payment_delete': 'Delete Payment',
+                        'tenant_create': 'Create Tenant',
+                        'property_create': 'Create Property',
+                      };
+                      return labels[type] || type;
+                    };
+                    return (
+                      <div key={approval.id} className="bg-white px-3 py-1.5 rounded border border-yellow-100">
+                        <span className="font-semibold text-gray-900 text-sm">{getTypeLabel(approval.requestType)}</span>
+                        <span className="text-yellow-600 ml-2 text-sm">by {approval.requesterName || 'Unknown'}</span>
+                      </div>
+                    );
+                  })}
+                  {pendingApprovals.length > 3 && (
+                    <div className="bg-white px-3 py-1.5 rounded border border-yellow-100">
+                      <span className="text-gray-700 text-sm">+{pendingApprovals.length - 3} more</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <Link
+              to="/approvals"
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium text-sm whitespace-nowrap ml-4"
+            >
+              Review Approvals
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Overdue Payments Alert */}
       {filteredOverdueInvoices.length > 0 && (
