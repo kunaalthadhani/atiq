@@ -175,3 +175,4 @@ ORDER BY ar.created_at DESC;
 - **Admin Behavior:** Admins can see all properties, including pending ones, and can see the "Pending Approval" badge.
 - **After Approval:** Once approved, the property becomes visible to all users (non-admin and admin).
 
+

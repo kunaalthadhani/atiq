@@ -424,7 +424,12 @@ class LocalStorageService {
     return property;
   }
 
-  async deleteProperty(id: string): Promise<boolean> {
+  async deleteProperty(id: string, userRole?: string): Promise<boolean> {
+    // Only admins can delete properties
+    if (userRole?.trim() !== 'admin') {
+      return false;
+    }
+    
     // Check if property has units
     const units = this.loadFromStorage<Unit>('units');
     const hasUnits = units.some(u => u.propertyId === id);
@@ -462,7 +467,12 @@ class LocalStorageService {
     return unit;
   }
 
-  async deleteUnit(id: string): Promise<boolean> {
+  async deleteUnit(id: string, userRole?: string): Promise<boolean> {
+    // Only admins can delete units
+    if (userRole?.trim() !== 'admin') {
+      return false;
+    }
+    
     // Check if unit has contracts
     const contracts = this.loadFromStorage<Contract>('contracts');
     const hasContracts = contracts.some(c => c.unitId === id);
@@ -484,7 +494,12 @@ class LocalStorageService {
     return tenant;
   }
 
-  async deleteTenant(id: string): Promise<boolean> {
+  async deleteTenant(id: string, userRole?: string): Promise<boolean> {
+    // Only admins can delete tenants
+    if (userRole?.trim() !== 'admin') {
+      return false;
+    }
+    
     // Check if tenant has contracts
     const contracts = this.loadFromStorage<Contract>('contracts');
     const hasContracts = contracts.some(c => c.tenantId === id);

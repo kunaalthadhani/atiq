@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { Unit, Property } from '@/types';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -48,6 +48,9 @@ export default function Units() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Units.tsx:handleSubmit:entry',message:'handleSubmit called',data:{user:user?JSON.stringify({id:user.id,email:user.email,role:user.role}):'NULL',hasUser:!!user,userId:user?.id,userRole:user?.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
     try {
       const formData = new FormData(e.currentTarget);
 
@@ -66,10 +69,23 @@ export default function Units() {
       if (editingUnit) {
         await dataService.updateUnit(editingUnit.id, unitData);
       } else {
-        const result = await dataService.createUnit(unitData, user?.id, user?.role);
-        if ('requiresApproval' in result) {
-          alert(result.message || 'Unit creation request submitted for approval');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Units.tsx:handleSubmit:beforeGuard',message:'Before guard check',data:{user:user?JSON.stringify({id:user.id,email:user.email,role:user.role}):'NULL',hasUser:!!user,userId:user?.id,userRole:user?.role,guardWillPass:!!user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+        if (!user?.id) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Units.tsx:handleSubmit:guardBlocked',message:'Guard blocked - no userId',data:{user:user?JSON.stringify({id:user.id,email:user.email,role:user.role}):'NULL'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          alert('User session not found. Please log in again.');
+          return;
         }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Units.tsx:handleSubmit:beforeCreateUnit',message:'About to call createUnit',data:{userId:user.id,userRole:user.role,unitNumber:unitData.unitNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+        const result = await dataService.createUnit(unitData, user.id, user.role);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Units.tsx:handleSubmit:afterCreateUnit',message:'createUnit returned',data:{hasRequiresApproval:'requiresApproval' in result,resultType:typeof result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
       }
 
       await loadData();
@@ -89,11 +105,15 @@ export default function Units() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this unit?')) {
       try {
-        const success = await dataService.deleteUnit(id);
+        const success = await dataService.deleteUnit(id, user?.role);
         if (success) {
           await loadData();
         } else {
-          alert('Cannot delete unit with associated contracts');
+          if (user?.role?.trim() !== 'admin') {
+            alert('Only admins can delete units');
+          } else {
+            alert('Cannot delete unit with associated contracts');
+          }
         }
       } catch (error) {
         console.error('Error deleting unit:', error);
@@ -101,6 +121,8 @@ export default function Units() {
       }
     }
   };
+
+  const isAdmin = user?.role?.trim() === 'admin';
 
   const handleCancel = () => {
     setShowForm(false);
@@ -209,12 +231,6 @@ export default function Units() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Unit {unit.unitNumber}</h3>
                   <p className="text-sm text-gray-600">{getPropertyName(unit.propertyId)}</p>
-                  {unit.approvalStatus === 'pending' && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mt-1">
-                      <Clock className="w-3 h-3 mr-1" />
-                      Pending Approval
-                    </span>
-                  )}
                 </div>
                 <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded">
                   {unit.type.toUpperCase()}
@@ -252,13 +268,15 @@ export default function Units() {
                   <Edit2 className="w-4 h-4 mr-1" />
                   Edit
                 </button>
-                <button
-                  onClick={() => handleDelete(unit.id)}
-                  className="flex-1 flex items-center justify-center px-3 py-2 border border-danger-300 text-danger-600 rounded-lg hover:bg-danger-50 transition-colors text-sm"
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDelete(unit.id)}
+                    className="flex-1 flex items-center justify-center px-3 py-2 border border-danger-300 text-danger-600 rounded-lg hover:bg-danger-50 transition-colors text-sm"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>

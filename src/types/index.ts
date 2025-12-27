@@ -158,7 +158,7 @@ export interface DashboardStats {
 }
 
 // Approval system types
-export type ApprovalRequestType = 'contract_create' | 'contract_terminate' | 'contract_cancel' | 'payment_create' | 'payment_delete' | 'tenant_create' | 'property_create' | 'unit_create';
+export type ApprovalRequestType = 'contract_create' | 'contract_terminate' | 'contract_cancel' | 'payment_create' | 'payment_delete' | 'tenant_create' | 'property_create';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalRequest {
@@ -167,7 +167,7 @@ export interface ApprovalRequest {
   requestedBy: string; // User ID
   approvedBy?: string; // User ID
   status: ApprovalStatus;
-  entityType: 'contract' | 'payment' | 'tenant' | 'property' | 'unit';
+  entityType: 'contract' | 'payment' | 'tenant' | 'property';
   entityId?: string; // ID after creation
   requestData: any; // The full data for the request
   rejectionReason?: string;

@@ -120,11 +120,15 @@ export default function Properties() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this property?')) {
       try {
-        const success = await dataService.deleteProperty(id);
+        const success = await dataService.deleteProperty(id, user?.role);
         if (success) {
           await loadProperties();
         } else {
-          alert('Cannot delete property with associated units');
+          if (user?.role?.trim() !== 'admin') {
+            alert('Only admins can delete properties');
+          } else {
+            alert('Cannot delete property with associated units');
+          }
         }
       } catch (error) {
         console.error('Error deleting property:', error);
@@ -132,6 +136,8 @@ export default function Properties() {
       }
     }
   };
+
+  const isAdmin = user?.role?.trim() === 'admin';
 
   const handleCancel = () => {
     setShowForm(false);
@@ -324,13 +330,15 @@ export default function Properties() {
                   >
                     <Edit2 className="w-5 h-5" />
                   </button>
-                  <button
-                    onClick={() => handleDelete(property.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDelete(property.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
                   <button
                     onClick={() =>
                       setExpandedPropertyId(

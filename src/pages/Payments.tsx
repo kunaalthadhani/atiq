@@ -504,14 +504,16 @@ Unit: ${invoice.unit.unitNumber}`;
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(payment!.id)}
-                        className="hover:text-danger-600"
-                        title="Delete payment"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {user?.role?.trim() === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(payment!.id)}
+                          className="hover:text-danger-600"
+                          title="Delete payment"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

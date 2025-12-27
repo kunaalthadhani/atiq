@@ -483,8 +483,15 @@ class SupabaseService {
     return mapProperty(data);
   }
 
-  async deleteProperty(id: string): Promise<boolean> {
+  async deleteProperty(id: string, userRole?: string): Promise<boolean> {
     if (!this.checkSupabase()) return false;
+    
+    // Only admins can delete properties
+    if (userRole?.trim() !== 'admin') {
+      console.error('Only admins can delete properties');
+      return false;
+    }
+    
     const { error } = await supabase!
       .from('properties')
       .delete()
@@ -504,131 +511,16 @@ class SupabaseService {
   async getUnits(propertyId?: string, userRole?: string, userId?: string): Promise<Unit[]> {
     if (!this.checkSupabase()) return [];
     
-    const trimmedRole = userRole?.trim();
-    let pendingUnitIds: string[] = [];
-    if (trimmedRole !== 'admin' && userId) {
-      try {
-        console.log('=== FETCHING PENDING UNIT APPROVAL REQUESTS ===');
-        console.log('User ID:', userId);
-        console.log('User Role:', userRole);
-        
-        const { data: approvalRequests, error: approvalError } = await supabase!
-          .from('approval_requests')
-          .select('entity_id, request_data')
-          .eq('request_type', 'unit_create')
-          .eq('entity_type', 'unit')
-          .eq('requested_by', userId)
-          .eq('status', 'pending');
-
-        console.log('Approval requests found:', approvalRequests?.length || 0);
-        console.log('Approval requests:', approvalRequests);
-        console.log('Approval error:', approvalError);
-
-        if (approvalRequests) {
-          pendingUnitIds = approvalRequests
-            .map(req => {
-              const id = req.entity_id || req.request_data?.unitId;
-              console.log('Processing request:', { entity_id: req.entity_id, unitId: req.request_data?.unitId, finalId: id });
-              return id;
-            })
-            .filter((id): id is string => !!id);
-          
-          console.log('Pending Unit IDs extracted:', pendingUnitIds);
-        }
-        console.log('===============================================');
-      } catch (error) {
-        console.error('Error fetching pending unit approval requests:', error);
-      }
-    }
-    
-    // Non-admin users see approved units and their own pending units
-    if (trimmedRole !== 'admin') {
-      // Fetch approved units (or null status for backward compatibility)
-      // Use a simpler approach: fetch all, then filter in memory if needed
-      let approvedQuery = supabase!
-        .from('units')
-        .select('*');
-      
-      if (propertyId) {
-        approvedQuery = approvedQuery.eq('property_id', propertyId);
-      }
-      
-      const approvedResult = await approvedQuery.order('created_at', { ascending: false });
-      
-      // Filter approved units in memory (null or 'approved' status)
-      if (approvedResult.data) {
-        approvedResult.data = approvedResult.data.filter((u: any) => 
-          !u.approval_status || u.approval_status === 'approved'
-        );
-      }
-      
-      // If there are pending units, fetch them separately
-      let pendingResult: any = { data: null, error: null };
-      if (pendingUnitIds.length > 0) {
-        let pendingQuery = supabase!
-          .from('units')
-          .select('*')
-          .eq('approval_status', 'pending')
-          .in('id', pendingUnitIds)
-          .order('created_at', { ascending: false });
-        
-        if (propertyId) {
-          pendingQuery = pendingQuery.eq('property_id', propertyId);
-        }
-        
-        pendingResult = await pendingQuery;
-      }
-      
-      // Debug logging
-      console.log('=== UNITS FETCH DEBUG ===');
-      console.log('User ID:', userId);
-      console.log('User Role:', userRole);
-      console.log('Pending Unit IDs:', pendingUnitIds);
-      console.log('Approved units:', approvedResult.data?.length || 0);
-      console.log('Pending units:', pendingResult?.data?.length || 0);
-      if (approvedResult.data) {
-        approvedResult.data.forEach((u: any) => {
-          console.log(`Approved Unit ${u.unit_number}: approval_status=${u.approval_status}, id=${u.id}`);
-        });
-      }
-      if (pendingResult?.data) {
-        pendingResult.data.forEach((u: any) => {
-          console.log(`Pending Unit ${u.unit_number}: approval_status=${u.approval_status}, id=${u.id}`);
-        });
-      }
-      console.log('Approved Error:', approvedResult.error);
-      console.log('Pending Error:', pendingResult?.error);
-      console.log('==========================');
-      
-      if (approvedResult.error) {
-        console.error('Error fetching approved units:', approvedResult.error);
-        return [];
-      }
-      
-      // Combine and deduplicate
-      const allUnits = [
-        ...(approvedResult.data || []),
-        ...(pendingResult?.data || [])
-      ];
-      
-      // Remove duplicates by ID
-      const uniqueUnits = Array.from(
-        new Map(allUnits.map((u: any) => [u.id, u])).values()
-      );
-      
-      return uniqueUnits.map(mapUnit);
-    }
-    
-    // Admin sees all units
-    let adminQuery = supabase!
+    // Units no longer require approval - return all approved units
+    let query = supabase!
       .from('units')
       .select('*');
     
     if (propertyId) {
-      adminQuery = adminQuery.eq('property_id', propertyId);
+      query = query.eq('property_id', propertyId);
     }
     
-    const { data, error } = await adminQuery.order('created_at', { ascending: false });
+    const { data, error } = await query.order('created_at', { ascending: false });
     
     if (error) {
       console.error('Error fetching units:', error);
@@ -658,22 +550,12 @@ class SupabaseService {
     unit: Omit<Unit, 'id' | 'createdAt'>,
     userId?: string,
     userRole?: string
-  ): Promise<Unit | { requiresApproval: boolean; approvalRequestId: string; message: string }> {
+  ): Promise<Unit> {
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
     
-    console.log('=== CREATING UNIT ===');
-    console.log('User ID:', userId);
-    console.log('User Role:', userRole);
-    console.log('Unit data:', unit);
-    
-    // Always create the unit, but set approval_status based on user role
+    // Units are created immediately without approval
     const unitRow = toUnitRow(unit);
-    const trimmedRole = userRole?.trim();
-    const approvalStatus = trimmedRole === 'admin' ? 'approved' : 'pending';
-    unitRow.approval_status = approvalStatus;
-    
-    console.log('Unit row to insert:', unitRow);
-    console.log('Approval status:', approvalStatus);
+    unitRow.approval_status = 'approved'; // Always approved
     
     const { data, error } = await supabase!
       .from('units')
@@ -686,51 +568,7 @@ class SupabaseService {
       throw error;
     }
     
-    console.log('Unit created successfully:', data);
-    console.log('Unit approval_status in DB:', data.approval_status);
-    
-    const createdUnit = mapUnit(data);
-    console.log('Mapped unit approvalStatus:', createdUnit.approvalStatus);
-    
-    // If user is not admin, create approval request
-    if (trimmedRole !== 'admin' && userId) {
-      try {
-        console.log('Creating approval request for unit:', createdUnit.id);
-        const approvalRequest = await this.createApprovalRequest(
-          'unit_create',
-          'unit',
-          { unitId: createdUnit.id, ...unit }, // Include unitId in request data
-          userId
-        );
-        console.log('Approval request created:', approvalRequest);
-        
-        // Update the approval request with entity_id for easier querying
-        const { error: updateError } = await supabase!
-          .from('approval_requests')
-          .update({ entity_id: createdUnit.id })
-          .eq('id', approvalRequest.id);
-        
-        if (updateError) {
-          console.error('Error updating approval request entity_id:', updateError);
-        } else {
-          console.log('Approval request entity_id updated successfully');
-        }
-        
-        console.log('=== UNIT CREATION COMPLETE ===');
-        return {
-          requiresApproval: true,
-          approvalRequestId: approvalRequest.id,
-          message: 'Unit created and submitted for approval'
-        };
-      } catch (error: any) {
-        console.error('Error creating approval request:', error);
-        // Unit is already created, so we still return it
-        return createdUnit;
-      }
-    }
-    
-    // Admin can see unit immediately
-    return createdUnit;
+    return mapUnit(data);
   }
 
   async updateUnit(id: string, updates: Partial<Omit<Unit, 'id' | 'createdAt'>>): Promise<Unit | null> {
@@ -763,8 +601,15 @@ class SupabaseService {
     return mapUnit(data);
   }
 
-  async deleteUnit(id: string): Promise<boolean> {
+  async deleteUnit(id: string, userRole?: string): Promise<boolean> {
     if (!this.checkSupabase()) return false;
+    
+    // Only admins can delete units
+    if (userRole?.trim() !== 'admin') {
+      console.error('Only admins can delete units');
+      return false;
+    }
+    
     const { error } = await supabase!
       .from('units')
       .delete()
@@ -1032,8 +877,15 @@ class SupabaseService {
     return mapTenant(data);
   }
 
-  async deleteTenant(id: string): Promise<boolean> {
+  async deleteTenant(id: string, userRole?: string): Promise<boolean> {
     if (!this.checkSupabase()) return false;
+    
+    // Only admins can delete tenants
+    if (userRole?.trim() !== 'admin') {
+      console.error('Only admins can delete tenants');
+      return false;
+    }
+    
     // Check if tenant has contracts
     const { data: contracts } = await supabase!
       .from('contracts')
@@ -1812,6 +1664,9 @@ class SupabaseService {
     requestData: any,
     userId: string
   ): Promise<ApprovalRequest> {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:createApprovalRequest:entry',message:'createApprovalRequest called',data:{requestType,entityType,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!this.checkSupabase()) throw new Error('Supabase is not configured');
     
     const { data, error } = await supabase!
@@ -1826,6 +1681,10 @@ class SupabaseService {
       .select()
       .single();
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:createApprovalRequest:result',message:'Approval request insert result',data:{success:!error,approvalRequestId:data?.id,error:error?.message,errorCode:error?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
     if (error) {
       console.error('Error creating approval request:', error);
       throw error;
@@ -1838,6 +1697,9 @@ class SupabaseService {
     status?: ApprovalStatus,
     userId?: string
   ): Promise<ApprovalRequestWithDetails[]> {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:getApprovalRequests:entry',message:'getApprovalRequests called',data:{status,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     if (!this.checkSupabase()) return [];
     
     console.log('=== FETCHING APPROVAL REQUESTS ===');
@@ -1860,6 +1722,10 @@ class SupabaseService {
     }
     
     const { data, error } = await query;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:getApprovalRequests:queryResult',message:'Query result',data:{count:data?.length||0,requests:data?.map((r:any)=>({id:r.id,requestType:r.request_type,entityType:r.entity_type,status:r.status,entityId:r.entity_id})),error:error?.message,unitCreateRequests:data?.filter((r:any)=>r.request_type==='unit_create').length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     
     console.log('Query result - data:', data);
     console.log('Query result - error:', error);
@@ -2066,41 +1932,6 @@ class SupabaseService {
           }
           
           entityId = propertyId;
-          break;
-          
-        case 'unit_create':
-          // Update existing unit instead of creating new one
-          const unitId = request.request_data.unitId;
-          if (!unitId) {
-            return { success: false, message: 'Unit ID not found in request' };
-          }
-          
-          // Update unit with any modifications from admin
-          const unitUpdateData: any = { ...request.request_data };
-          // Remove fields that shouldn't be updated
-          delete unitUpdateData.unitId;
-          delete unitUpdateData.id;
-          delete unitUpdateData.createdAt;
-          delete unitUpdateData.approvalStatus;
-          delete unitUpdateData.approval_status;
-          
-          const updatedUnit = await this.updateUnit(unitId, unitUpdateData);
-          if (!updatedUnit) {
-            return { success: false, message: 'Failed to update unit' };
-          }
-          
-          // Set approval status to approved
-          const { error: unitUpdateError } = await supabase!
-            .from('units')
-            .update({ approval_status: 'approved' })
-            .eq('id', unitId);
-          
-          if (unitUpdateError) {
-            console.error('Error updating unit approval status:', unitUpdateError);
-            return { success: false, message: 'Failed to approve unit' };
-          }
-          
-          entityId = unitId;
           break;
           
         default:

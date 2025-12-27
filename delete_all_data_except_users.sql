@@ -56,3 +56,4 @@ DELETE FROM tenants;
 -- UNION ALL
 -- SELECT 'users', COUNT(*) FROM users;
 
+
