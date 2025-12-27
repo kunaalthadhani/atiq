@@ -207,22 +207,28 @@ const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_statu
   return row;
 };
 
-const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
-  tenant_id: contract.tenantId,
-  unit_id: contract.unitId,
-  contract_number: contract.contractNumber,
-  start_date: contract.startDate.toISOString().split('T')[0],
-  end_date: contract.endDate.toISOString().split('T')[0],
-  monthly_rent: contract.monthlyRent,
-  security_deposit: contract.securityDeposit,
-  payment_frequency: contract.paymentFrequency,
-  number_of_installments: contract.numberOfInstallments,
-  status: contract.status,
-  reminder_period: contract.reminderPeriod,
-  due_date_day: contract.dueDateDay,
-  notes: contract.notes,
-  attachments: contract.attachments || [],
-});
+const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => {
+  const row: any = {
+    tenant_id: contract.tenantId,
+    unit_id: contract.unitId,
+    contract_number: contract.contractNumber,
+    start_date: contract.startDate.toISOString().split('T')[0],
+    end_date: contract.endDate.toISOString().split('T')[0],
+    monthly_rent: contract.monthlyRent,
+    security_deposit: contract.securityDeposit,
+    payment_frequency: contract.paymentFrequency,
+    number_of_installments: contract.numberOfInstallments,
+    status: contract.status,
+    reminder_period: contract.reminderPeriod,
+    due_date_day: contract.dueDateDay,
+    notes: contract.notes,
+  };
+  // Only include attachments if provided (column may not exist yet, but will be added later)
+  if (contract.attachments !== undefined && contract.attachments.length > 0) {
+    row.attachments = contract.attachments;
+  }
+  return row;
+};
 
 // Normalize contract data from JSONB (converts string dates to Date objects)
 function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt'> {
@@ -1174,7 +1180,10 @@ class SupabaseService {
     if (updates.reminderPeriod !== undefined) updateData.reminder_period = updates.reminderPeriod;
     if (updates.dueDateDay !== undefined) updateData.due_date_day = updates.dueDateDay;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
-    if (updates.attachments !== undefined) updateData.attachments = updates.attachments || [];
+    // Only update attachments if provided (column may not exist yet, but will be added later)
+    if (updates.attachments !== undefined) {
+      updateData.attachments = updates.attachments || [];
+    }
 
     const { data, error } = await supabase!
       .from('contracts')
