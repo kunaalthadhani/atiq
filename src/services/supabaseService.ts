@@ -207,46 +207,46 @@ const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_statu
   return row;
 };
 
-const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'> & { startDate?: Date | string; endDate?: Date | string }) => {
-  // Handle startDate as either Date object or string (from JSONB)
-  let startDateStr: string;
-  const startDate: Date | string = contract.startDate as Date | string;
-  if (startDate instanceof Date) {
-    startDateStr = startDate.toISOString().split('T')[0];
-  } else if (typeof startDate === 'string') {
-    startDateStr = startDate.split('T')[0];
-  } else {
-    startDateStr = new Date(startDate as any).toISOString().split('T')[0];
-  }
-  
-  // Handle endDate as either Date object or string (from JSONB)
-  let endDateStr: string;
-  const endDate: Date | string = contract.endDate as Date | string;
-  if (endDate instanceof Date) {
-    endDateStr = endDate.toISOString().split('T')[0];
-  } else if (typeof endDate === 'string') {
-    endDateStr = endDate.split('T')[0];
-  } else {
-    endDateStr = new Date(endDate as any).toISOString().split('T')[0];
-  }
-  
+const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => ({
+  tenant_id: contract.tenantId,
+  unit_id: contract.unitId,
+  contract_number: contract.contractNumber,
+  start_date: contract.startDate.toISOString().split('T')[0],
+  end_date: contract.endDate.toISOString().split('T')[0],
+  monthly_rent: contract.monthlyRent,
+  security_deposit: contract.securityDeposit,
+  payment_frequency: contract.paymentFrequency,
+  number_of_installments: contract.numberOfInstallments,
+  status: contract.status,
+  reminder_period: contract.reminderPeriod,
+  due_date_day: contract.dueDateDay,
+  notes: contract.notes,
+  attachments: contract.attachments || [],
+});
+
+// Normalize contract data from JSONB (converts string dates to Date objects)
+function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt'> {
   return {
-    tenant_id: contract.tenantId,
-    unit_id: contract.unitId,
-    contract_number: contract.contractNumber,
-    start_date: startDateStr,
-    end_date: endDateStr,
-    monthly_rent: contract.monthlyRent,
-    security_deposit: contract.securityDeposit,
-    payment_frequency: contract.paymentFrequency,
-    number_of_installments: contract.numberOfInstallments,
-    status: contract.status,
-    reminder_period: contract.reminderPeriod,
-    due_date_day: contract.dueDateDay,
-    notes: contract.notes,
-    attachments: contract.attachments || [],
+    tenantId: data.tenantId,
+    unitId: data.unitId,
+    contractNumber: data.contractNumber,
+    startDate: data.startDate instanceof Date 
+      ? data.startDate 
+      : new Date(data.startDate),
+    endDate: data.endDate instanceof Date 
+      ? data.endDate 
+      : new Date(data.endDate),
+    monthlyRent: data.monthlyRent,
+    securityDeposit: data.securityDeposit,
+    paymentFrequency: data.paymentFrequency,
+    numberOfInstallments: data.numberOfInstallments,
+    status: data.status,
+    reminderPeriod: data.reminderPeriod,
+    dueDateDay: data.dueDateDay,
+    notes: data.notes,
+    attachments: data.attachments || [],
   };
-};
+}
 
 const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'> & { paymentDate?: Date | string }) => {
   // Handle paymentDate as either Date object or string (from JSONB)
@@ -1010,20 +1010,12 @@ class SupabaseService {
     // Admin can create directly - existing logic
     // Validate overlapping contracts for active status
     if (contract.status === 'active') {
-      // Convert dates to strings for comparison
-      const startDateStr = contract.startDate instanceof Date 
-        ? contract.startDate.toISOString().split('T')[0]
-        : (typeof contract.startDate === 'string' ? contract.startDate.split('T')[0] : new Date(contract.startDate as any).toISOString().split('T')[0]);
-      const endDateStr = contract.endDate instanceof Date 
-        ? contract.endDate.toISOString().split('T')[0]
-        : (typeof contract.endDate === 'string' ? contract.endDate.split('T')[0] : new Date(contract.endDate as any).toISOString().split('T')[0]);
-      
       const { data: overlapping } = await supabase!
         .from('contracts')
         .select('id')
         .eq('unit_id', contract.unitId)
         .eq('status', 'active')
-        .or(`and(start_date.lte.${endDateStr},end_date.gte.${startDateStr})`);
+        .or(`and(start_date.lte.${contract.endDate.toISOString().split('T')[0]},end_date.gte.${contract.startDate.toISOString().split('T')[0]})`);
       
       if (overlapping && overlapping.length > 0) {
         return { success: false, message: 'This unit already has an active contract for the selected dates.' };
@@ -1172,26 +1164,8 @@ class SupabaseService {
     if (updates.tenantId !== undefined) updateData.tenant_id = updates.tenantId;
     if (updates.unitId !== undefined) updateData.unit_id = updates.unitId;
     if (updates.contractNumber !== undefined) updateData.contract_number = updates.contractNumber;
-    if (updates.startDate !== undefined) {
-      const startDate = updates.startDate as Date | string;
-      if (startDate instanceof Date) {
-        updateData.start_date = startDate.toISOString().split('T')[0];
-      } else if (typeof startDate === 'string') {
-        updateData.start_date = startDate.split('T')[0];
-      } else {
-        updateData.start_date = new Date(startDate as any).toISOString().split('T')[0];
-      }
-    }
-    if (updates.endDate !== undefined) {
-      const endDate = updates.endDate as Date | string;
-      if (endDate instanceof Date) {
-        updateData.end_date = endDate.toISOString().split('T')[0];
-      } else if (typeof endDate === 'string') {
-        updateData.end_date = endDate.split('T')[0];
-      } else {
-        updateData.end_date = new Date(endDate as any).toISOString().split('T')[0];
-      }
-    }
+    if (updates.startDate !== undefined) updateData.start_date = updates.startDate.toISOString().split('T')[0];
+    if (updates.endDate !== undefined) updateData.end_date = updates.endDate.toISOString().split('T')[0];
     if (updates.monthlyRent !== undefined) updateData.monthly_rent = updates.monthlyRent;
     if (updates.securityDeposit !== undefined) updateData.security_deposit = updates.securityDeposit;
     if (updates.paymentFrequency !== undefined) updateData.payment_frequency = updates.paymentFrequency;
@@ -1909,7 +1883,8 @@ class SupabaseService {
           break;
           
         case 'contract_create':
-          const contractResult = await this.createContract(request.request_data, approverId, 'admin');
+          const normalizedContract = normalizeContractFromJSONB(request.request_data);
+          const contractResult = await this.createContract(normalizedContract, approverId, 'admin');
           if (contractResult.success && contractResult.contract) {
             entityId = contractResult.contract.id;
           } else {
