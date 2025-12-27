@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FileText, DollarSign, AlertCircle, Users, Building2 } from 'lucide-react';
 import { dataService } from '@/services/dataService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails, Property } from '@/types';
+import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
 
 export default function Approvals() {
@@ -58,7 +58,7 @@ export default function Approvals() {
       );
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Approvals.tsx:loadRequests:result',message:'Approval requests loaded',data:{count:data.length,unitCreateCount:data.filter(r=>r.requestType==='unit_create').length,requests:data.map(r=>({id:r.id,requestType:r.requestType,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Approvals.tsx:loadRequests:result',message:'Approval requests loaded',data:{count:data.length,requests:data.map(r=>({id:r.id,requestType:r.requestType,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
       
       console.log('Approvals page - received data:', data);

@@ -176,3 +176,4 @@ ORDER BY ar.created_at DESC;
 - **After Approval:** Once approved, the property becomes visible to all users (non-admin and admin).
 
 
+
