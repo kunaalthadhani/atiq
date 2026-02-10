@@ -68,7 +68,7 @@ export default function Tenants() {
     // Search filter
     const matchesSearch = !searchQuery || 
       `${t.firstName} ${t.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.phone.includes(searchQuery) ||
       t.secondaryPhone?.includes(searchQuery) ||
       t.whatsappNumber?.includes(searchQuery) ||
@@ -103,10 +103,12 @@ export default function Tenants() {
 
       const idExpiryDateStr = formData.get('idExpiryDate') as string;
       const idExpiryDate = idExpiryDateStr ? new Date(idExpiryDateStr) : undefined;
+      const emailRaw = (formData.get('email') as string) || '';
+      const email = emailRaw.trim() || undefined;
       const tenantData = {
         firstName: formData.get('firstName') as string,
         lastName: formData.get('lastName') as string,
-        email: formData.get('email') as string,
+        email,
         phone: formData.get('phone') as string,
         secondaryPhone: (formData.get('secondaryPhone') as string) || undefined,
         whatsappNumber: formData.get('whatsappNumber') as string,
@@ -388,9 +390,13 @@ export default function Tenants() {
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <Mail className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <a href={`mailto:${tenant.email}`} className="hover:text-green-600 truncate">
-                    {tenant.email}
-                  </a>
+                  {tenant.email ? (
+                    <a href={`mailto:${tenant.email}`} className="hover:text-green-600 truncate">
+                      {tenant.email}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400 italic">No email</span>
+                  )}
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <CreditCard className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -600,13 +606,12 @@ export default function Tenants() {
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
+                  Email
                 </label>
                 <input
                   type="email"
                   name="email"
                   defaultValue={editingTenant?.email}
-                  required
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>
@@ -768,7 +773,7 @@ export default function Tenants() {
                     {viewTenant.secondaryWhatsappNumber && (
                       <li><span className="font-medium">Secondary WhatsApp:</span> {viewTenant.secondaryWhatsappNumber}</li>
                     )}
-                    <li><span className="font-medium">Email:</span> {viewTenant.email}</li>
+                    <li><span className="font-medium">Email:</span> {viewTenant.email || '—'}</li>
                   </ul>
                 </div>
 

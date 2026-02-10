@@ -186,7 +186,7 @@ const toTenantRow = (tenant: Omit<Tenant, 'id' | 'createdAt'> & { approval_statu
   const row: any = {
     first_name: tenant.firstName,
     last_name: tenant.lastName,
-    email: tenant.email,
+    email: tenant.email || null,
     phone: tenant.phone,
     secondary_phone: tenant.secondaryPhone,
     whatsapp_number: tenant.whatsappNumber,
@@ -2255,7 +2255,7 @@ class SupabaseService {
     return tenants.filter(t => 
       t.firstName.toLowerCase().includes(lowerQuery) ||
       t.lastName.toLowerCase().includes(lowerQuery) ||
-      t.email.toLowerCase().includes(lowerQuery) ||
+      (t.email || '').toLowerCase().includes(lowerQuery) ||
       t.phone.includes(query) ||
       t.whatsappNumber?.includes(query) ||
       t.nationalId.toLowerCase().includes(lowerQuery) ||
@@ -2279,7 +2279,7 @@ class SupabaseService {
         property.name.toLowerCase().includes(lowerQuery) ||
         unit.unitNumber.toLowerCase().includes(lowerQuery) ||
         c.contractNumber?.toLowerCase().includes(lowerQuery) ||
-        tenant.email.toLowerCase().includes(lowerQuery) ||
+        (tenant.email || '').toLowerCase().includes(lowerQuery) ||
         tenant.phone.includes(query) ||
         tenant.whatsappNumber?.includes(query) ||
         tenant.nationalId.toLowerCase().includes(lowerQuery)
@@ -2295,7 +2295,7 @@ class SupabaseService {
       `${inv.tenant.firstName} ${inv.tenant.lastName}`.toLowerCase().includes(lowerQuery) ||
       inv.unit.unitNumber.toLowerCase().includes(lowerQuery) ||
       inv.property.name.toLowerCase().includes(lowerQuery) ||
-      inv.tenant.email.toLowerCase().includes(lowerQuery) ||
+      (inv.tenant.email || '').toLowerCase().includes(lowerQuery) ||
       inv.tenant.phone.includes(query) ||
       inv.tenant.whatsappNumber?.includes(query)
     );

@@ -373,7 +373,7 @@ export default function Contracts() {
   const filteredTenants = tenantSearch
     ? tenants.filter(t => 
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(tenantSearch.toLowerCase()) ||
-        t.email.toLowerCase().includes(tenantSearch.toLowerCase())
+        (t.email || '').toLowerCase().includes(tenantSearch.toLowerCase())
       )
     : [];
 
@@ -734,7 +734,7 @@ export default function Contracts() {
                           selectedTenantId === tenant.id ? 'bg-green-50' : ''
                         }`}
                       >
-                        {tenant.firstName} {tenant.lastName} - {tenant.email}
+                        {tenant.firstName} {tenant.lastName}{tenant.email ? ` - ${tenant.email}` : ''}
                       </button>
                     ))}
                   </div>
@@ -1091,7 +1091,7 @@ export default function Contracts() {
                   <h3 className="font-semibold text-gray-900 mb-3">Tenant Information</h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="text-gray-600">Name:</span> <span className="font-medium">{viewingContract.tenant.firstName} {viewingContract.tenant.lastName}</span></p>
-                    <p><span className="text-gray-600">Email:</span> <span className="font-medium">{viewingContract.tenant.email}</span></p>
+                    <p><span className="text-gray-600">Email:</span> <span className="font-medium">{viewingContract.tenant.email || '—'}</span></p>
                     <p><span className="text-gray-600">Phone:</span> <span className="font-medium">{viewingContract.tenant.phone}</span></p>
                     <p><span className="text-gray-600">National ID:</span> <span className="font-medium">{viewingContract.tenant.nationalId}</span></p>
                   </div>
@@ -1405,10 +1405,12 @@ function TenantForm({ onSuccess, onCancel }: { onSuccess: (tenant: Tenant) => vo
     const idExpiryDate = idExpiryDateStr ? new Date(idExpiryDateStr) : undefined;
 
     const idNumber = formData.get('idNumber') as string;
+    const emailRaw = (formData.get('email') as string) || '';
+    const email = emailRaw.trim() || undefined;
     const tenantData = {
       firstName: formData.get('firstName') as string,
       lastName: formData.get('lastName') as string,
-      email: formData.get('email') as string,
+      email,
       phone: formData.get('phone') as string,
       whatsappNumber: formData.get('whatsappNumber') as string,
       nationalId: idNumber || formData.get('nationalId') as string || '',
@@ -1572,12 +1574,11 @@ function TenantForm({ onSuccess, onCancel }: { onSuccess: (tenant: Tenant) => vo
       {/* Email */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Email *
+          Email
         </label>
         <input
           type="email"
           name="email"
-          required
           className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
         />
       </div>

@@ -39,7 +39,7 @@ export interface Tenant {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string;
   phone: string;
   secondaryPhone?: string;
   whatsappNumber: string;
