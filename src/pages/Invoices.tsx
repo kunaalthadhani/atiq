@@ -144,6 +144,11 @@ Thank you!`;
   };
 
   const handleShareEmail = (invoice: InvoiceWithDetails) => {
+    if (!invoice.tenant.email) {
+      alert('Email not available for this tenant');
+      setShareDropdownOpen(null);
+      return;
+    }
     const subject = `Payment Reminder - Invoice ${invoice.invoiceNumber}`;
     const body = generateInvoiceMessage(invoice);
     const link = generateEmailLink(invoice.tenant.email, subject, body);
