@@ -194,9 +194,8 @@ Thank you!`;
 
     try {
       const formData = new FormData(e.currentTarget);
-      // Round to 2 decimal places to avoid floating-point precision issues
       const rawAmount = parseFloat(formData.get('amount') as string);
-      const roundedAmount = Math.round(rawAmount * 100) / 100;
+      const roundedAmount = Math.round(rawAmount);
       
       const paymentData = {
         invoiceId: prefilledInvoice.id,
@@ -641,9 +640,9 @@ Thank you!`;
                   type="number"
                   name="amount"
                   required
-                  min="0.01"
-                  step="0.01"
-                  defaultValue={Math.round(prefilledInvoice.remainingAmount * 100) / 100}
+                  min="1"
+                  step="1"
+                  defaultValue={Math.round(prefilledInvoice.remainingAmount)}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>

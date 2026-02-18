@@ -316,16 +316,16 @@ class LocalStorageService {
     let amountPerInstallment = contract.monthlyRent;
     if (contract.paymentFrequency === '1_payment') {
       intervalMonths = 12;
-      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue);
     } else if (contract.paymentFrequency === '2_payment') {
       intervalMonths = 6;
-      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 2);
     } else if (contract.paymentFrequency === '3_payment') {
       intervalMonths = 4;
-      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 3);
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3;
-      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 4);
     }
     const invoices = this.loadFromStorage<Invoice>('invoices');
     const contractInvoices = invoices.filter(inv => inv.contractId === contract.id).sort((a, b) => a.installmentNumber - b.installmentNumber);
@@ -335,9 +335,9 @@ class LocalStorageService {
       const dueDate = addMonths(contract.startDate, i * intervalMonths);
       if (contract.dueDateDay) dueDate.setDate(contract.dueDateDay);
       const amount = hasCustomAmounts
-        ? Math.round(contract.paymentAmounts![i] * 100) / 100
-        : Math.round(amountPerInstallment * 100) / 100;
-      const remainingAmount = Math.round((amount - inv.paidAmount) * 100) / 100;
+        ? Math.round(contract.paymentAmounts![i])
+        : Math.round(amountPerInstallment);
+      const remainingAmount = Math.round(amount - inv.paidAmount);
       inv.amount = amount;
       inv.dueDate = dueDate;
       inv.remainingAmount = remainingAmount < 0 ? 0 : remainingAmount;
@@ -366,15 +366,13 @@ class LocalStorageService {
     const invoices = this.loadFromStorage<Invoice>('invoices');
     const invoice = invoices.find(inv => inv.id === payment.invoiceId);
     if (invoice) {
-      // Round amounts to 2 decimal places to avoid floating-point precision issues
-      const newPaidAmount = Math.round(((invoice.paidAmount || 0) + payment.amount) * 100) / 100;
-      const newRemainingAmount = Math.round((invoice.amount - newPaidAmount) * 100) / 100;
+      const newPaidAmount = Math.round((invoice.paidAmount || 0) + payment.amount);
+      const newRemainingAmount = Math.round(invoice.amount - newPaidAmount);
       
       invoice.paidAmount = newPaidAmount;
       invoice.remainingAmount = newRemainingAmount;
       
-      // Update status
-      if (newRemainingAmount <= 0.01) {
+      if (newRemainingAmount <= 0) {
         invoice.status = 'paid';
         // Ensure remaining amount is exactly 0 when paid
         invoice.remainingAmount = 0;

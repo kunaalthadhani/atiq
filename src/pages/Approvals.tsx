@@ -943,7 +943,7 @@ function ContractApprovalEditor({
           <input
             type="number"
             min="0"
-            step="0.01"
+            step="1"
             value={editedData.monthlyRent || ''}
             onChange={(e) => handleFieldChange('monthlyRent', parseFloat(e.target.value) || 0)}
             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
@@ -955,7 +955,7 @@ function ContractApprovalEditor({
           <input
             type="number"
             min="0"
-            step="0.01"
+            step="1"
             value={editedData.securityDeposit || ''}
             onChange={(e) => handleFieldChange('securityDeposit', parseFloat(e.target.value) || 0)}
             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
@@ -1108,7 +1108,7 @@ function PaymentApprovalEditor({
           <input
             type="number"
             min="0"
-            step="0.01"
+            step="1"
             value={editedData.amount || ''}
             onChange={(e) => handleFieldChange('amount', parseFloat(e.target.value) || 0)}
             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"

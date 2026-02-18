@@ -126,9 +126,8 @@ export default function Payments() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    // Round to 2 decimal places to avoid floating-point precision issues
     const rawAmount = parseFloat(formData.get('amount') as string);
-    const roundedAmount = Math.round(rawAmount * 100) / 100;
+    const roundedAmount = Math.round(rawAmount);
 
     const paymentData = {
       invoiceId: selectedInvoiceId || formData.get('invoiceId') as string,
@@ -584,9 +583,9 @@ Unit: ${invoice.unit.unitNumber}`;
                   type="number"
                   name="amount"
                   required
-                  min="0.01"
-                  step="0.01"
-                  defaultValue={selectedInvoice ? Math.round(selectedInvoice.amount * 100) / 100 : ''}
+                  min="1"
+                  step="1"
+                  defaultValue={selectedInvoice ? Math.round(selectedInvoice.amount) : ''}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>

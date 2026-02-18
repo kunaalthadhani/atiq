@@ -34,6 +34,7 @@ export default function Contracts() {
   const [error, setError] = useState<string>('');
   const [viewingContract, setViewingContract] = useState<ContractWithDetails | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [tenantSearch, setTenantSearch] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [formStartDate, setFormStartDate] = useState<string>('');
@@ -189,6 +190,7 @@ export default function Contracts() {
       setSelectedTenantId(editingContract.tenantId);
       setTenantSearch(`${editingContract.tenant.firstName} ${editingContract.tenant.lastName}`);
       setSelectedPropertyId(editingContract.unit.propertyId);
+      setSelectedUnitId(editingContract.unitId);
       setFormStartDate(editingContract.startDate.toISOString().split('T')[0]);
       setFormEndDate(editingContract.endDate.toISOString().split('T')[0]);
       setFormFrequency(editingContract.paymentFrequency);
@@ -222,12 +224,12 @@ export default function Contracts() {
     const parsedPaymentAmounts = paymentAmounts.map(a => parseFloat(a) || 0);
     
     if (numInstallments > 0 && parsedPaymentAmounts.length === numInstallments) {
-      const totalPaymentAmounts = Math.round(parsedPaymentAmounts.reduce((sum, a) => sum + a, 0) * 100) / 100;
-      const roundedYearlyRent = Math.round(yearlyRentValue * 100) / 100;
+      const totalPaymentAmounts = Math.round(parsedPaymentAmounts.reduce((sum, a) => sum + a, 0));
+      const roundedYearlyRent = Math.round(yearlyRentValue);
       
       if (Math.abs(totalPaymentAmounts - roundedYearlyRent) > 0.01) {
         setError(
-          `The total of all payment amounts (AED ${totalPaymentAmounts.toLocaleString('en-US', { minimumFractionDigits: 2 })}) does not match the total rent (AED ${roundedYearlyRent.toLocaleString('en-US', { minimumFractionDigits: 2 })}). Please adjust the payment amounts.`
+          `The total of all payment amounts (AED ${totalPaymentAmounts.toLocaleString('en-US')}) does not match the total rent (AED ${roundedYearlyRent.toLocaleString('en-US')}). Please adjust the payment amounts.`
         );
         return;
       }
@@ -329,6 +331,7 @@ export default function Contracts() {
 
   const resetForm = () => {
     setSelectedPropertyId('');
+    setSelectedUnitId('');
     setTenantSearch('');
     setSelectedTenantId('');
     setFormStartDate('');
@@ -784,6 +787,7 @@ export default function Contracts() {
                     value={selectedPropertyId}
                     onChange={(e) => {
                       setSelectedPropertyId(e.target.value);
+                      setSelectedUnitId('');
                     }}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
                   >
@@ -803,7 +807,8 @@ export default function Contracts() {
                   <select
                     name="unitId"
                     required
-                    defaultValue={editingContract?.unitId || ''}
+                    value={selectedUnitId}
+                    onChange={(e) => setSelectedUnitId(e.target.value)}
                     disabled={!selectedPropertyId}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white disabled:bg-gray-50 disabled:text-gray-500"
                   >
@@ -843,7 +848,7 @@ export default function Contracts() {
                     id="yearlyRent"
                     required
                     min="0"
-                    step="0.01"
+                    step="1"
                     value={yearlyRent}
                     onChange={(e) => setYearlyRent(e.target.value)}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -964,7 +969,7 @@ export default function Contracts() {
                       Payment Amounts (AED) *
                     </label>
                     <span className="text-xs text-gray-500">
-                      Total must equal {parseFloat(yearlyRent).toLocaleString('en-US', { minimumFractionDigits: 2 })} AED
+                      Total must equal {Math.round(parseFloat(yearlyRent)).toLocaleString('en-US')} AED
                     </span>
                   </div>
                   <div className="space-y-2">
@@ -982,9 +987,9 @@ export default function Contracts() {
                             setPaymentAmounts(newAmounts);
                           }}
                           required
-                          min="0.01"
-                          step="0.01"
-                          placeholder="0.00"
+                          min="1"
+                          step="1"
+                          placeholder="0"
                           className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                         />
                       </div>
@@ -994,12 +999,12 @@ export default function Contracts() {
                   {(() => {
                     const total = paymentAmounts.reduce((sum, a) => sum + (parseFloat(a) || 0), 0);
                     const yearlyRentNum = parseFloat(yearlyRent) || 0;
-                    const diff = Math.round((total - yearlyRentNum) * 100) / 100;
+                    const diff = Math.round(total - yearlyRentNum);
                     const isMatch = Math.abs(diff) <= 0.01;
                     return (
                       <div className={`mt-2 pt-2 border-t border-gray-300 flex items-center justify-between text-sm ${isMatch ? 'text-green-700' : 'text-red-600'}`}>
                         <span className="font-medium">
-                          Total: AED {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          Total: AED {Math.round(total).toLocaleString('en-US')}
                         </span>
                         {isMatch ? (
                           <span className="flex items-center text-green-600 text-xs font-medium">
@@ -1009,7 +1014,7 @@ export default function Contracts() {
                         ) : (
                           <span className="flex items-center text-red-600 text-xs font-medium">
                             <AlertCircle className="w-3.5 h-3.5 mr-1" />
-                            {diff > 0 ? `Over by AED ${diff.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `Short by AED ${Math.abs(diff).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                            {diff > 0 ? `Over by AED ${diff.toLocaleString('en-US')}` : `Short by AED ${Math.abs(diff).toLocaleString('en-US')}`}
                           </span>
                         )}
                       </div>
@@ -1073,7 +1078,7 @@ export default function Contracts() {
                   name="securityDeposit"
                   required
                   min="0"
-                  step="0.01"
+                  step="1"
                   defaultValue={editingContract?.securityDeposit || ''}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />

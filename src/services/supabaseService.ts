@@ -282,7 +282,7 @@ const toPaymentRow = (payment: Omit<Payment, 'id' | 'createdAt'> & { paymentDate
   
   return {
     invoice_id: payment.invoiceId,
-    amount: Math.round(payment.amount * 100) / 100, // Round to 2 decimal places
+    amount: Math.round(payment.amount),
     payment_date: paymentDateStr,
     payment_method: payment.paymentMethod,
     reference_number: payment.referenceNumber,
@@ -1264,16 +1264,16 @@ class SupabaseService {
     let amountPerInstallment = contract.monthlyRent;
     if (contract.paymentFrequency === '1_payment') {
       intervalMonths = 12;
-      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue);
     } else if (contract.paymentFrequency === '2_payment') {
       intervalMonths = 6;
-      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 2);
     } else if (contract.paymentFrequency === '3_payment') {
       intervalMonths = 4;
-      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 3);
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3;
-      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 4);
     }
     
     const { data: invoices, error: fetchErr } = await supabase!
@@ -1293,10 +1293,10 @@ class SupabaseService {
       const dueDateStr = dueDate.toISOString().split('T')[0];
       
       const newAmount = hasCustomAmounts
-        ? Math.round(contract.paymentAmounts![i] * 100) / 100
-        : Math.round(amountPerInstallment * 100) / 100;
+        ? Math.round(contract.paymentAmounts![i])
+        : Math.round(amountPerInstallment);
       const paidAmount = parseFloat(inv.paid_amount) || 0;
-      const newRemaining = Math.round((newAmount - paidAmount) * 100) / 100;
+      const newRemaining = Math.round(newAmount - paidAmount);
       const remainingAmount = newRemaining < 0 ? 0 : newRemaining;
       
       await supabase!
@@ -1327,16 +1327,16 @@ class SupabaseService {
     // 4 Payments = quarterly (3 months each)
     if (contract.paymentFrequency === '1_payment') {
       intervalMonths = 12; // Annually
-      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue);
     } else if (contract.paymentFrequency === '2_payment') {
       intervalMonths = 6; // Semi-annually
-      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 2);
     } else if (contract.paymentFrequency === '3_payment') {
       intervalMonths = 4; // Every 4 months
-      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 3);
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3; // Quarterly
-      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
+      amountPerInstallment = Math.round(totalContractValue / 4);
     }
 
     const invoices = [];
@@ -1349,10 +1349,9 @@ class SupabaseService {
       
       const invoiceNumber = `INV-${contract.id.slice(-4).toUpperCase()}-${String(i + 1).padStart(3, '0')}`;
       
-      // Use custom payment amount for this installment if available, otherwise use equal split
       const invoiceAmount = hasCustomAmounts 
-        ? Math.round(contract.paymentAmounts![i] * 100) / 100
-        : Math.round(amountPerInstallment * 100) / 100;
+        ? Math.round(contract.paymentAmounts![i])
+        : Math.round(amountPerInstallment);
       
       invoices.push({
         contract_id: contract.id,
@@ -1659,13 +1658,11 @@ class SupabaseService {
       .single();
 
     if (invoiceData) {
-      // Round amounts to 2 decimal places to avoid floating-point precision issues
-      const newPaidAmount = Math.round(((invoiceData.paid_amount || 0) + payment.amount) * 100) / 100;
-      const newRemainingAmount = Math.round((invoiceData.amount - newPaidAmount) * 100) / 100;
+      const newPaidAmount = Math.round((invoiceData.paid_amount || 0) + payment.amount);
+      const newRemainingAmount = Math.round(invoiceData.amount - newPaidAmount);
       
       let newStatus = 'pending';
-      // Use a small epsilon (0.01) for comparison to handle floating-point precision
-      if (newRemainingAmount <= 0.01) {
+      if (newRemainingAmount <= 0) {
         newStatus = 'paid';
         // Ensure remaining amount is exactly 0 when paid
         const finalRemainingAmount = 0;
@@ -1754,11 +1751,11 @@ class SupabaseService {
 
     if (invoiceData) {
       // Subtract the payment amount
-      const newPaidAmount = Math.round(Math.max(0, ((invoiceData.paid_amount || 0) - payment.amount)) * 100) / 100;
-      const newRemainingAmount = Math.round((invoiceData.amount - newPaidAmount) * 100) / 100;
+      const newPaidAmount = Math.round(Math.max(0, (invoiceData.paid_amount || 0) - payment.amount));
+      const newRemainingAmount = Math.round(invoiceData.amount - newPaidAmount);
       
       let newStatus = 'pending';
-      if (newRemainingAmount <= 0.01) {
+      if (newRemainingAmount <= 0) {
         newStatus = 'paid';
         const finalRemainingAmount = 0;
         const finalPaidAmount = invoiceData.amount;

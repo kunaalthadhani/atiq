@@ -417,7 +417,7 @@ export default function Units() {
                   defaultValue={editingUnit?.monthlyRent}
                   required
                   min="0"
-                  step="0.01"
+                  step="1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="5000"
                 />
