@@ -193,6 +193,7 @@ export default function Contracts() {
       setFormEndDate(editingContract.endDate.toISOString().split('T')[0]);
       setFormFrequency(editingContract.paymentFrequency);
       setCalculatedInstallments(editingContract.numberOfInstallments);
+      setContractDuration('custom');
       setContractAttachments(editingContract.attachments || []);
       setYearlyRent((editingContract.monthlyRent * 12).toString());
       if (editingContract.paymentAmounts && editingContract.paymentAmounts.length > 0) {
@@ -380,13 +381,17 @@ export default function Contracts() {
 
   const getAvailableProperties = () => {
     return properties.filter(prop => {
+      if (editingContract && prop.id === editingContract.unit.propertyId) return true;
       const propUnits = units.filter(u => u.propertyId === prop.id);
       return propUnits.some(u => !u.isOccupied);
     });
   };
 
   const getAvailableUnitsForProperty = (propertyId: string) => {
-    return units.filter(u => u.propertyId === propertyId && !u.isOccupied);
+    return units.filter(u => {
+      if (editingContract && u.id === editingContract.unitId) return true;
+      return u.propertyId === propertyId && !u.isOccupied;
+    });
   };
 
   const filteredTenants = tenantSearch
@@ -798,6 +803,7 @@ export default function Contracts() {
                   <select
                     name="unitId"
                     required
+                    defaultValue={editingContract?.unitId || ''}
                     disabled={!selectedPropertyId}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white disabled:bg-gray-50 disabled:text-gray-500"
                   >
@@ -821,6 +827,7 @@ export default function Contracts() {
                     type="text"
                     name="contractNumber"
                     required
+                    defaultValue={editingContract?.contractNumber || ''}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="CT-001"
                   />
@@ -942,6 +949,7 @@ export default function Contracts() {
                     name="dueDateDay"
                     min="1"
                     max="31"
+                    defaultValue={editingContract?.dueDateDay || ''}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Day (1-31)"
                   />
@@ -1043,6 +1051,7 @@ export default function Contracts() {
                   </label>
                   <select
                     name="reminderPeriod"
+                    defaultValue={editingContract?.reminderPeriod || ''}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
                   >
                     <option value="">No Reminders</option>
@@ -1065,6 +1074,7 @@ export default function Contracts() {
                   required
                   min="0"
                   step="0.01"
+                  defaultValue={editingContract?.securityDeposit || ''}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>
@@ -1077,6 +1087,7 @@ export default function Contracts() {
                 <textarea
                   name="notes"
                   rows={2}
+                  defaultValue={editingContract?.notes || ''}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
                   placeholder="Additional notes about this contract..."
                 />
@@ -1095,7 +1106,7 @@ export default function Contracts() {
                   type="submit"
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
                 >
-                  Create Contract
+                  {editingContract ? 'Update Contract' : 'Create Contract'}
                 </button>
               </div>
             </form>
