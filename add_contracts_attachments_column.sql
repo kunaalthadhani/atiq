@@ -5,12 +5,12 @@
 -- Run this in your Supabase SQL editor when you're ready to use attachments
 -- ============================================
 
--- Add attachments column as TEXT array (stores file URLs or base64 strings)
+-- Add attachments column as JSONB array (stores file URLs or base64 strings)
 ALTER TABLE contracts 
-  ADD COLUMN IF NOT EXISTS attachments TEXT[] DEFAULT '{}';
+  ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;
 
 -- Add comment for documentation
-COMMENT ON COLUMN contracts.attachments IS 'Array of file URLs or base64 strings for contract attachments';
+COMMENT ON COLUMN contracts.attachments IS 'JSONB array of file URLs or base64 strings for contract attachments';
 
 -- ============================================
 -- Verification Query (Run this to verify)

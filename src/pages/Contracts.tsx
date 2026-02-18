@@ -51,6 +51,7 @@ export default function Contracts() {
   const [pendingContractApprovals, setPendingContractApprovals] = useState<ApprovalRequestWithDetails[]>([]);
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const [attachmentContractId, setAttachmentContractId] = useState<string | null>(null);
+  const [viewingAttachmentUrl, setViewingAttachmentUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -1262,16 +1263,15 @@ export default function Contracts() {
                           </span>
                         </div>
                         <div className="flex gap-2 items-center">
-                          {attachment.startsWith('data:') || attachment.startsWith('http') ? (
-                            <a
-                              href={attachment}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-green-600 hover:text-green-700"
+                          {(attachment.startsWith('data:') || attachment.startsWith('http')) && (
+                            <button
+                              type="button"
+                              onClick={() => setViewingAttachmentUrl(attachment)}
+                              className="text-sm text-green-600 hover:text-green-700 font-medium"
                             >
                               View
-                            </a>
-                          ) : null}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={async () => {
@@ -1298,6 +1298,50 @@ export default function Contracts() {
                   <p className="text-sm text-gray-500 italic">No attachments yet</p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attachment viewer modal - so data URLs open reliably */}
+      {viewingAttachmentUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4"
+          onClick={() => setViewingAttachmentUrl(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-[90vw] max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200">
+              <span className="text-sm font-medium text-gray-700">Attachment</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.open(viewingAttachmentUrl, '_blank')}
+                  className="text-sm text-green-600 hover:text-green-700"
+                >
+                  Open in new tab
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingAttachmentUrl(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 min-h-[200px] bg-gray-100">
+              {viewingAttachmentUrl.startsWith('data:image/') || (viewingAttachmentUrl.startsWith('data:') && viewingAttachmentUrl.includes('image/')) ? (
+                <img src={viewingAttachmentUrl} alt="Attachment" className="max-w-full max-h-[75vh] object-contain mx-auto" />
+              ) : viewingAttachmentUrl.startsWith('data:application/pdf') || (viewingAttachmentUrl.startsWith('data:') && viewingAttachmentUrl.includes('pdf')) ? (
+                <iframe src={viewingAttachmentUrl} title="PDF" className="w-full h-[75vh] border-0 rounded" />
+              ) : viewingAttachmentUrl.startsWith('http') ? (
+                <iframe src={viewingAttachmentUrl} title="Attachment" className="w-full h-[75vh] border-0 rounded" />
+              ) : (
+                <iframe src={viewingAttachmentUrl} title="Attachment" className="w-full h-[75vh] border-0 rounded" />
+              )}
             </div>
           </div>
         </div>
@@ -1334,14 +1378,25 @@ export default function Contracts() {
                           {attachment.startsWith('data:') ? `Attachment ${index + 1}` : attachment.split('/').pop() || `Attachment ${index + 1}`}
                         </span>
                       </div>
-                      <button
-                        onClick={() => {
-                          setContractAttachments(contractAttachments.filter((_, i) => i !== index));
-                        }}
-                        className="ml-2 p-1 text-red-600 hover:text-red-700 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2 items-center">
+                        {(attachment.startsWith('data:') || attachment.startsWith('http')) && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingAttachmentUrl(attachment)}
+                            className="text-sm text-green-600 hover:text-green-700 font-medium"
+                          >
+                            View
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setContractAttachments(contractAttachments.filter((_, i) => i !== index));
+                          }}
+                          className="ml-2 p-1 text-red-600 hover:text-red-700 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
