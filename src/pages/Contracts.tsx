@@ -184,30 +184,26 @@ export default function Contracts() {
     }
   }, [formStartDate, formEndDate, formFrequency]);
 
-  // Pre-fill form when editing contract
-  useEffect(() => {
-    if (editingContract) {
-      setSelectedTenantId(editingContract.tenantId);
-      setTenantSearch(`${editingContract.tenant.firstName} ${editingContract.tenant.lastName}`);
-      setSelectedPropertyId(editingContract.unit.propertyId);
-      setSelectedUnitId(editingContract.unitId);
-      setFormStartDate(editingContract.startDate.toISOString().split('T')[0]);
-      setFormEndDate(editingContract.endDate.toISOString().split('T')[0]);
-      setFormFrequency(editingContract.paymentFrequency);
-      setCalculatedInstallments(editingContract.numberOfInstallments);
-      setContractDuration('custom');
-      setContractAttachments(editingContract.attachments || []);
-      setYearlyRent((editingContract.monthlyRent * 12).toString());
-      if (editingContract.paymentAmounts && editingContract.paymentAmounts.length > 0) {
-        setPaymentAmounts(editingContract.paymentAmounts.map(a => a.toString()));
-      } else {
-        setPaymentAmounts(Array(editingContract.numberOfInstallments).fill(''));
-      }
+  const openEditForm = (contract: ContractWithDetails) => {
+    setSelectedTenantId(contract.tenantId);
+    setTenantSearch(`${contract.tenant.firstName} ${contract.tenant.lastName}`);
+    setSelectedPropertyId(contract.unit.propertyId);
+    setSelectedUnitId(contract.unitId);
+    setFormStartDate(contract.startDate.toISOString().split('T')[0]);
+    setFormEndDate(contract.endDate.toISOString().split('T')[0]);
+    setFormFrequency(contract.paymentFrequency);
+    setCalculatedInstallments(contract.numberOfInstallments);
+    setContractDuration('custom');
+    setContractAttachments(contract.attachments || []);
+    setYearlyRent((contract.monthlyRent * 12).toString());
+    if (contract.paymentAmounts && contract.paymentAmounts.length > 0) {
+      setPaymentAmounts(contract.paymentAmounts.map(a => a.toString()));
     } else {
-      setYearlyRent('');
-      setPaymentAmounts([]);
+      setPaymentAmounts(Array(contract.numberOfInstallments).fill(''));
     }
-  }, [editingContract]);
+    setEditingContract(contract);
+    setShowForm(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1217,8 +1213,7 @@ export default function Contracts() {
                   <button
                     type="button"
                     onClick={() => {
-                      setEditingContract(viewingContract);
-                      setShowForm(true);
+                      openEditForm(viewingContract);
                       setViewingContract(null);
                     }}
                     className="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
