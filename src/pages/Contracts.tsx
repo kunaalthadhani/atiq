@@ -49,6 +49,8 @@ export default function Contracts() {
   const [yearlyRent, setYearlyRent] = useState<string>('');
   const [paymentAmounts, setPaymentAmounts] = useState<string[]>([]);
   const [pendingContractApprovals, setPendingContractApprovals] = useState<ApprovalRequestWithDetails[]>([]);
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [attachmentContractId, setAttachmentContractId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -352,6 +354,22 @@ export default function Contracts() {
     }
   };
 
+  const handleDeleteDraft = async (id: string) => {
+    if (!confirm('Delete this draft contract? This cannot be undone.')) return;
+    try {
+      const ok = await dataService.deleteContract(id);
+      if (ok) {
+        setViewingContract(null);
+        await loadData();
+      } else {
+        alert('Only draft contracts can be deleted.');
+      }
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+      alert('Failed to delete contract. Please try again.');
+    }
+  };
+
   const handleCancel = () => {
     setShowForm(false);
     setError('');
@@ -626,6 +644,14 @@ export default function Contracts() {
                   >
                     View
                   </button>
+                  {contract.status === 'draft' && (
+                    <button
+                      onClick={() => handleDeleteDraft(contract.id)}
+                      className="px-3 py-1.5 border border-danger-300 text-danger-600 rounded-lg hover:bg-danger-50 transition-colors text-xs font-medium"
+                    >
+                      Delete
+                    </button>
+                  )}
                   {contract.status === 'active' && (
                     <button
                       onClick={() => handleTerminate(contract.id)}
@@ -1002,8 +1028,11 @@ export default function Contracts() {
                       Terminated
                     </option>
                   </select>
-                  {editingContract?.status === 'active' && (
+                  {editingContract?.status === 'active' && user?.role !== 'admin' && (
                     <p className="text-xs text-gray-500 mt-1">Active contracts cannot be edited. Use Terminate button instead.</p>
+                  )}
+                  {editingContract?.status === 'active' && user?.role === 'admin' && (
+                    <p className="text-xs text-green-600 mt-1">As admin you can edit this contract. Related invoices will be updated to match (invoice numbers stay the same).</p>
                   )}
                 </div>
 
@@ -1167,7 +1196,7 @@ export default function Contracts() {
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t border-gray-200">
-                {viewingContract.status === 'draft' && (
+                {(viewingContract.status === 'draft' || (viewingContract.status === 'active' && user?.role === 'admin')) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1181,7 +1210,16 @@ export default function Contracts() {
                     Edit Contract
                   </button>
                 )}
-                
+                {viewingContract.status === 'draft' && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDraft(viewingContract.id)}
+                    className="flex items-center px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete contract
+                  </button>
+                )}
                 {viewingContract.status === 'active' && (
                   <button
                     type="button"
@@ -1203,8 +1241,9 @@ export default function Contracts() {
                   <h3 className="font-semibold text-gray-900">Attachments</h3>
                   <button
                     onClick={() => {
-                      setEditingContract(viewingContract);
+                      setAttachmentContractId(viewingContract.id);
                       setContractAttachments(viewingContract.attachments || []);
+                      setShowAttachmentsModal(true);
                     }}
                     className="flex items-center px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
@@ -1222,7 +1261,7 @@ export default function Contracts() {
                             {attachment.startsWith('data:') ? `Attachment ${index + 1}` : attachment.split('/').pop() || `Attachment ${index + 1}`}
                           </span>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                           {attachment.startsWith('data:') || attachment.startsWith('http') ? (
                             <a
                               href={attachment}
@@ -1233,6 +1272,24 @@ export default function Contracts() {
                               View
                             </a>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const next = (viewingContract.attachments || []).filter((_, i) => i !== index);
+                              try {
+                                await dataService.updateContract(viewingContract.id, { attachments: next }, user?.id, user?.role);
+                                setViewingContract({ ...viewingContract, attachments: next });
+                                await loadData();
+                              } catch (e) {
+                                console.error(e);
+                                alert('Failed to remove attachment.');
+                              }
+                            }}
+                            className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                            title="Remove attachment"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1247,14 +1304,15 @@ export default function Contracts() {
       )}
 
       {/* Edit Contract Attachments Modal */}
-      {editingContract && (
+      {showAttachmentsModal && attachmentContractId && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="flex-shrink-0 bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between rounded-t-xl">
               <h2 className="text-xl font-bold text-gray-900">Manage Attachments</h2>
               <button
                 onClick={() => {
-                  setEditingContract(null);
+                  setShowAttachmentsModal(false);
+                  setAttachmentContractId(null);
                   setContractAttachments([]);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1292,26 +1350,40 @@ export default function Contracts() {
               {/* Upload New Attachment */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add New Attachment
+                  Add New Attachments
                 </label>
                 <input
                   type="file"
+                  multiple
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
                   onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      // Convert to base64 for storage
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const base64 = event.target?.result as string;
-                        setContractAttachments([...contractAttachments, base64]);
-                      };
-                      reader.readAsDataURL(file);
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      // Convert all files to base64
+                      const newAttachments: string[] = [];
+                      let processedCount = 0;
+                      
+                      files.forEach((file) => {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const base64 = event.target?.result as string;
+                          newAttachments.push(base64);
+                          processedCount++;
+                          
+                          // When all files are processed, update state
+                          if (processedCount === files.length) {
+                            setContractAttachments([...contractAttachments, ...newAttachments]);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      });
                     }
+                    // Reset the input so the same files can be selected again if needed
+                    e.target.value = '';
                   }}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-500 mt-1">Supported: PDF, DOC, DOCX, JPG, PNG, TXT</p>
+                <p className="text-xs text-gray-500 mt-1">Supported: PDF, DOC, DOCX, JPG, PNG, TXT (You can select multiple files)</p>
               </div>
 
               {/* Buttons */}
@@ -1319,7 +1391,8 @@ export default function Contracts() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEditingContract(null);
+                    setShowAttachmentsModal(false);
+                    setAttachmentContractId(null);
                     setContractAttachments([]);
                   }}
                   className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
@@ -1330,15 +1403,16 @@ export default function Contracts() {
                   type="button"
                   onClick={async () => {
                     try {
-                      await dataService.updateContract(editingContract.id, { attachments: contractAttachments });
+                      await dataService.updateContract(attachmentContractId, { attachments: contractAttachments }, user?.id, user?.role);
                       await loadData();
                       // Reload the contract to get updated data
                       const updatedContracts = await dataService.getContracts();
-                      const updatedContract = updatedContracts.find(c => c.id === editingContract.id);
+                      const updatedContract = updatedContracts.find(c => c.id === attachmentContractId);
                       if (updatedContract) {
                         setViewingContract(updatedContract);
                       }
-                      setEditingContract(null);
+                      setShowAttachmentsModal(false);
+                      setAttachmentContractId(null);
                       setContractAttachments([]);
                     } catch (error) {
                       console.error('Error updating attachments:', error);

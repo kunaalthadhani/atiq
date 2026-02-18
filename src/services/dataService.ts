@@ -13,6 +13,7 @@ if (useSupabase) {
 
 // For now, let's use a localStorage-based service as fallback
 // Import the old localStorage-based service logic
+import { addMonths, differenceInMonths } from 'date-fns';
 import { 
   Property, Unit, Tenant, Contract, Invoice, Payment, Reminder,
   ContractWithDetails, InvoiceWithDetails, DashboardStats,
@@ -261,22 +262,30 @@ class LocalStorageService {
     return true;
   }
 
+  /** Delete a contract. Only allowed for draft contracts; any user can delete draft. */
+  async deleteContract(id: string): Promise<boolean> {
+    const contracts = this.loadFromStorage<Contract>('contracts');
+    const contract = contracts.find(c => c.id === id);
+    if (!contract) return false;
+    if (contract.status !== 'draft') return false;
+    const next = contracts.filter(c => c.id !== id);
+    this.saveToStorage('contracts', next);
+    return true;
+  }
+
   async updateContract(
     id: string, 
     updates: Partial<Omit<Contract, 'id' | 'createdAt'>>,
     _userId?: string,
     _userRole?: string
   ): Promise<Contract | null> {
-    // Parameters required for interface compatibility with supabaseService
-    const _unused = { _userId, _userRole };
-    void _unused;
     const contracts = this.loadFromStorage<Contract>('contracts');
     const contract = contracts.find(c => c.id === id);
     if (!contract) return null;
 
-    // Prevent editing active contracts
-    if (contract.status === 'active' && updates.status !== 'terminated') {
-      const allowedFields = ['status'];
+    // Non-admins: only status and attachments allowed on active contracts
+    if (contract.status === 'active' && updates.status !== 'terminated' && _userRole !== 'admin') {
+      const allowedFields = ['status', 'attachments'];
       const updateKeys = Object.keys(updates);
       const hasDisallowedFields = updateKeys.some(key => !allowedFields.includes(key));
       if (hasDisallowedFields) {
@@ -286,7 +295,54 @@ class LocalStorageService {
 
     Object.assign(contract, updates);
     this.saveToStorage('contracts', contracts);
+
+    // If admin edited active contract and changed invoice-relevant fields, sync invoices (invoice_number never changes)
+    const invoiceRelevantKeys = ['startDate', 'endDate', 'paymentFrequency', 'numberOfInstallments', 'paymentAmounts', 'dueDateDay', 'monthlyRent'];
+    const touchedInvoiceFields = Object.keys(updates).some(k => invoiceRelevantKeys.includes(k));
+    if (contract.status === 'active' && _userRole === 'admin' && touchedInvoiceFields) {
+      this.syncInvoicesForContractLocal(contract);
+    }
+
     return contract;
+  }
+
+  /** Sync amount and dueDate on invoices from contract; invoiceNumber is never changed. */
+  private syncInvoicesForContractLocal(contract: Contract) {
+    const totalMonths = differenceInMonths(contract.endDate, contract.startDate);
+    const totalContractValue = contract.monthlyRent * totalMonths;
+    const hasCustomAmounts = contract.paymentAmounts && 
+      contract.paymentAmounts.length === contract.numberOfInstallments;
+    let intervalMonths = 1;
+    let amountPerInstallment = contract.monthlyRent;
+    if (contract.paymentFrequency === '1_payment') {
+      intervalMonths = 12;
+      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
+    } else if (contract.paymentFrequency === '2_payment') {
+      intervalMonths = 6;
+      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
+    } else if (contract.paymentFrequency === '3_payment') {
+      intervalMonths = 4;
+      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
+    } else if (contract.paymentFrequency === '4_payment') {
+      intervalMonths = 3;
+      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
+    }
+    const invoices = this.loadFromStorage<Invoice>('invoices');
+    const contractInvoices = invoices.filter(inv => inv.contractId === contract.id).sort((a, b) => a.installmentNumber - b.installmentNumber);
+    for (const inv of contractInvoices) {
+      const i = inv.installmentNumber - 1;
+      if (i < 0 || i >= contract.numberOfInstallments) continue;
+      const dueDate = addMonths(contract.startDate, i * intervalMonths);
+      if (contract.dueDateDay) dueDate.setDate(contract.dueDateDay);
+      const amount = hasCustomAmounts
+        ? Math.round(contract.paymentAmounts![i] * 100) / 100
+        : Math.round(amountPerInstallment * 100) / 100;
+      const remainingAmount = Math.round((amount - inv.paidAmount) * 100) / 100;
+      inv.amount = amount;
+      inv.dueDate = dueDate;
+      inv.remainingAmount = remainingAmount < 0 ? 0 : remainingAmount;
+    }
+    this.saveToStorage('invoices', invoices);
   }
 
   async createPayment(

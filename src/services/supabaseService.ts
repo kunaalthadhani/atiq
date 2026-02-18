@@ -1137,6 +1137,27 @@ class SupabaseService {
     return true;
   }
 
+  /** Delete a contract. Only allowed for draft contracts; any user can delete draft. */
+  async deleteContract(id: string): Promise<boolean> {
+    if (!this.checkSupabase()) return false;
+    const { data: contract, error: fetchError } = await supabase!
+      .from('contracts')
+      .select('status')
+      .eq('id', id)
+      .single();
+    if (fetchError || !contract) return false;
+    if (contract.status !== 'draft') {
+      console.error('Only draft contracts can be deleted');
+      return false;
+    }
+    const { error } = await supabase!.from('contracts').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting contract:', error);
+      return false;
+    }
+    return true;
+  }
+
   async updateContract(
     id: string, 
     updates: Partial<Omit<Contract, 'id' | 'createdAt'>>,
@@ -1157,14 +1178,14 @@ class SupabaseService {
       return null;
     }
     
-    // Prevent editing active contracts (only allow status changes to terminated)
-    if (currentContract.status === 'active') {
+    // Prevent editing active contracts (only allow status/attachments) — admins can edit everything
+    if (currentContract.status === 'active' && userRole !== 'admin') {
       // Only allow status change to terminated (which requires approval)
       if (updates.status && updates.status !== 'terminated') {
         throw new Error('Active contracts cannot be edited. Only termination is allowed.');
       }
       // If trying to change anything else, block it
-      const allowedFields = ['status'];
+      const allowedFields = ['status', 'attachments'];
       const updateKeys = Object.keys(updates);
       const hasDisallowedFields = updateKeys.some(key => !allowedFields.includes(key));
       if (hasDisallowedFields && updates.status !== 'terminated') {
@@ -1219,7 +1240,70 @@ class SupabaseService {
       await this.generateInvoicesForContract(updatedContract);
     }
     
+    // If admin edited an active contract and changed invoice-relevant fields, sync invoices (never change invoice_number)
+    const invoiceRelevantKeys = ['startDate', 'endDate', 'paymentFrequency', 'numberOfInstallments', 'paymentAmounts', 'dueDateDay', 'monthlyRent'];
+    const touchedInvoiceFields = Object.keys(updates).some(k => invoiceRelevantKeys.includes(k));
+    if (currentContract.status === 'active' && userRole === 'admin' && touchedInvoiceFields) {
+      await this.syncInvoicesForContract(updatedContract);
+    }
+    
     return updatedContract;
+  }
+
+  /** Sync amount and due_date on existing invoices from contract; invoice_number is never changed. */
+  private async syncInvoicesForContract(contract: Contract) {
+    if (!this.checkSupabase()) return;
+    const { addMonths, differenceInMonths } = await import('date-fns');
+    
+    const totalMonths = differenceInMonths(contract.endDate, contract.startDate);
+    const totalContractValue = contract.monthlyRent * totalMonths;
+    const hasCustomAmounts = contract.paymentAmounts && 
+      contract.paymentAmounts.length === contract.numberOfInstallments;
+    
+    let intervalMonths = 1;
+    let amountPerInstallment = contract.monthlyRent;
+    if (contract.paymentFrequency === '1_payment') {
+      intervalMonths = 12;
+      amountPerInstallment = Math.round(totalContractValue * 100) / 100;
+    } else if (contract.paymentFrequency === '2_payment') {
+      intervalMonths = 6;
+      amountPerInstallment = Math.round((totalContractValue / 2) * 100) / 100;
+    } else if (contract.paymentFrequency === '3_payment') {
+      intervalMonths = 4;
+      amountPerInstallment = Math.round((totalContractValue / 3) * 100) / 100;
+    } else if (contract.paymentFrequency === '4_payment') {
+      intervalMonths = 3;
+      amountPerInstallment = Math.round((totalContractValue / 4) * 100) / 100;
+    }
+    
+    const { data: invoices, error: fetchErr } = await supabase!
+      .from('invoices')
+      .select('id, installment_number, paid_amount, amount')
+      .eq('contract_id', contract.id)
+      .order('installment_number', { ascending: true });
+    
+    if (fetchErr || !invoices?.length) return;
+    
+    for (const inv of invoices) {
+      const i = inv.installment_number - 1;
+      if (i < 0 || i >= contract.numberOfInstallments) continue;
+      
+      const dueDate = addMonths(contract.startDate, i * intervalMonths);
+      if (contract.dueDateDay) dueDate.setDate(contract.dueDateDay);
+      const dueDateStr = dueDate.toISOString().split('T')[0];
+      
+      const newAmount = hasCustomAmounts
+        ? Math.round(contract.paymentAmounts![i] * 100) / 100
+        : Math.round(amountPerInstallment * 100) / 100;
+      const paidAmount = parseFloat(inv.paid_amount) || 0;
+      const newRemaining = Math.round((newAmount - paidAmount) * 100) / 100;
+      const remainingAmount = newRemaining < 0 ? 0 : newRemaining;
+      
+      await supabase!
+        .from('invoices')
+        .update({ amount: newAmount, due_date: dueDateStr, remaining_amount: remainingAmount })
+        .eq('id', inv.id);
+    }
   }
 
   private async generateInvoicesForContract(contract: Contract) {
