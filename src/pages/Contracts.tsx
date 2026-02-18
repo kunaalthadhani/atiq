@@ -1315,22 +1315,13 @@ export default function Contracts() {
           >
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200">
               <span className="text-sm font-medium text-gray-700">Attachment</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.open(viewingAttachmentUrl, '_blank')}
-                  className="text-sm text-green-600 hover:text-green-700"
-                >
-                  Open in new tab
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewingAttachmentUrl(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setViewingAttachmentUrl(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="flex-1 overflow-auto p-4 min-h-[200px] bg-gray-100">
               {viewingAttachmentUrl.startsWith('data:image/') || (viewingAttachmentUrl.startsWith('data:') && viewingAttachmentUrl.includes('image/')) ? (
