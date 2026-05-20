@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Wallet, X, Trash2, Share2, MessageSquare, Mail, TrendingUp, Calendar, AlertCircle, Clock } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { Payment, InvoiceWithDetails, ApprovalRequestWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, formatDate, generateWhatsAppLink, generateEmailLink, cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Payments() {
   const { user } = useAuth();
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
@@ -17,9 +17,29 @@ export default function Payments() {
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null);
   const shareDropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const paymentsQuery = useQuery({
+    queryKey: queryKeys.payments(),
+    queryFn: () => dataService.getPayments(),
+  });
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoices(),
+    queryFn: () => dataService.getInvoices(),
+  });
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvalRequests('pending', undefined),
+    queryFn: () => dataService.getApprovalRequests('pending', undefined),
+  });
+  const payments: Payment[] = paymentsQuery.data ?? [];
+  const invoices: InvoiceWithDetails[] = invoicesQuery.data ?? [];
+  const pendingApprovals: ApprovalRequestWithDetails[] = (approvalsQuery.data ?? []).filter(
+    req => req.requestType === 'payment_create' && req.status === 'pending'
+  );
+
+  const loadData = () => {
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['approvalRequests'] });
+  };
 
   // Close share dropdown when clicking outside
   useEffect(() => {
@@ -32,30 +52,6 @@ export default function Payments() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const loadData = async () => {
-    try {
-      const paymentsData = await dataService.getPayments();
-      const invoicesData = await dataService.getInvoices();
-      setPayments(paymentsData);
-      setInvoices(invoicesData);
-      
-      // Load pending approval requests for payments
-      try {
-        const approvalRequests = await dataService.getApprovalRequests('pending', undefined);
-        const paymentApprovals = approvalRequests.filter(
-          req => req.requestType === 'payment_create' && req.status === 'pending'
-        );
-        setPendingApprovals(paymentApprovals);
-      } catch (error) {
-        console.error('Error loading approval requests:', error);
-      }
-    } catch (error) {
-      console.error('Error loading payments data:', error);
-      setPayments([]);
-      setInvoices([]);
-    }
-  };
 
   const getInvoiceDetails = (invoiceId: string) => {
     return invoices.find(inv => inv.id === invoiceId);

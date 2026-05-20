@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, FileText, Calendar, DollarSign, X, AlertCircle, Copy, CheckCircle, Clock, Ban, Paperclip, Trash2 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { ContractWithDetails, Tenant, Unit, Property, InvoiceWithDetails, ApprovalRequestWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, formatDate, getStatusColor, cn } from '@/lib/utils';
 import { addYears, subDays } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,14 +26,10 @@ const formatPaymentFrequency = (frequency: string): string => {
 
 export default function Contracts() {
   const { user } = useAuth();
-  const [contracts, setContracts] = useState<ContractWithDetails[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [error, setError] = useState<string>('');
   const [viewingContract, setViewingContract] = useState<ContractWithDetails | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
@@ -44,64 +42,65 @@ export default function Contracts() {
   const [contractDuration, setContractDuration] = useState<string>(''); // '1_year', 'custom', etc.
   const [showTenantForm, setShowTenantForm] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
   const [contractAttachments, setContractAttachments] = useState<string[]>([]);
   const [yearlyRent, setYearlyRent] = useState<string>('');
   const [paymentAmounts, setPaymentAmounts] = useState<string[]>([]);
-  const [pendingContractApprovals, setPendingContractApprovals] = useState<ApprovalRequestWithDetails[]>([]);
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const [attachmentContractId, setAttachmentContractId] = useState<string | null>(null);
   const [viewingAttachmentUrl, setViewingAttachmentUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [user]);
+  const isNonAdmin = !!user && user.role?.trim() !== 'admin';
+
+  const contractsQuery = useQuery({
+    queryKey: queryKeys.contracts(),
+    queryFn: () => dataService.getContracts(),
+  });
+  const tenantsQuery = useQuery({
+    queryKey: queryKeys.tenants(),
+    queryFn: () => dataService.getTenants(),
+  });
+  const unitsQuery = useQuery({
+    queryKey: queryKeys.units(),
+    queryFn: () => dataService.getUnits(),
+  });
+  const propertiesQuery = useQuery({
+    queryKey: queryKeys.properties(),
+    queryFn: () => dataService.getProperties(),
+  });
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoices(),
+    queryFn: () => dataService.getInvoices(),
+  });
+  const pendingApprovalsQuery = useQuery({
+    queryKey: queryKeys.approvalRequests('pending', user?.id),
+    queryFn: () => dataService.getApprovalRequests('pending', user?.id),
+    enabled: isNonAdmin,
+  });
+
+  const contracts: ContractWithDetails[] = contractsQuery.data ?? [];
+  const tenants: Tenant[] = tenantsQuery.data ?? [];
+  const units: Unit[] = unitsQuery.data ?? [];
+  const properties: Property[] = propertiesQuery.data ?? [];
+  const invoices: InvoiceWithDetails[] = invoicesQuery.data ?? [];
+  const pendingContractApprovals: ApprovalRequestWithDetails[] = (pendingApprovalsQuery.data ?? []).filter(
+    req => req.requestType === 'contract_create' && req.status === 'pending'
+  );
+  const error = contractsQuery.error ? 'Failed to load contracts. Please refresh the page.' : '';
+
+  const loadData = () => {
+    queryClient.invalidateQueries({ queryKey: ['contracts'] });
+    queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    queryClient.invalidateQueries({ queryKey: ['units'] });
+    queryClient.invalidateQueries({ queryKey: ['properties'] });
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['approvalRequests'] });
+  };
 
   // Reset to first page when search or filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, filterStatus]);
-
-  const loadData = async () => {
-    try {
-      const [contractsData, tenantsData, unitsData, propertiesData, invoicesData] = await Promise.all([
-        dataService.getContracts(),
-        dataService.getTenants(),
-        dataService.getUnits(),
-        dataService.getProperties(),
-        dataService.getInvoices()
-      ]);
-      
-      setContracts(contractsData);
-      setTenants(tenantsData);
-      setUnits(unitsData);
-      setProperties(propertiesData);
-      setInvoices(invoicesData);
-      
-      // Load pending contract approval requests for non-admin users
-      if (user && user.role?.trim() !== 'admin') {
-        try {
-          const approvalRequests = await dataService.getApprovalRequests('pending', user.id);
-          const contractApprovals = approvalRequests.filter(
-            req => req.requestType === 'contract_create' && req.status === 'pending'
-          );
-          setPendingContractApprovals(contractApprovals);
-        } catch (error) {
-          console.error('Error loading contract approval requests:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading contracts data:', error);
-      setError('Failed to load contracts. Please refresh the page.');
-      // Set empty arrays to prevent crashes
-      setContracts([]);
-      setTenants([]);
-      setUnits([]);
-      setProperties([]);
-      setInvoices([]);
-    }
-  };
 
   // Sort contracts by creation date (newest first)
   const sortedContracts = [...contracts].sort((a, b) => {

@@ -1,66 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Search, Users, Mail, Phone, CreditCard, X, Edit2, Trash2, Copy, Calendar, Eye, Clock } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { Tenant } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Tenants() {
   const { user } = useAuth();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [contracts, setContracts] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
-  const [loadingTenants, setLoadingTenants] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [viewTenant, setViewTenant] = useState<Tenant | null>(null);
   const [selectedIdType, setSelectedIdType] = useState<string>('');
 
-  useEffect(() => {
-    loadAllData();
-  }, []);
+  const tenantsQuery = useQuery({
+    queryKey: queryKeys.tenants(user?.role, user?.id),
+    queryFn: () => dataService.getTenants({ from: 0, to: 199 }, user?.role, user?.id),
+  });
+  const contractsQuery = useQuery({
+    queryKey: queryKeys.contracts(),
+    queryFn: () => dataService.getContracts(),
+  });
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoices(),
+    queryFn: () => dataService.getInvoices(),
+  });
+  const paymentsQuery = useQuery({
+    queryKey: queryKeys.payments(),
+    queryFn: () => dataService.getPayments(),
+  });
+  const tenants: Tenant[] = tenantsQuery.data ?? [];
+  const contracts: any[] = contractsQuery.data ?? [];
+  const invoices: any[] = invoicesQuery.data ?? [];
+  const payments: any[] = paymentsQuery.data ?? [];
+  const loadingTenants = tenantsQuery.isLoading;
 
-  const loadAllData = async () => {
-    // Phase 1: load tenants first to render quickly
-    setLoadingTenants(true);
-    try {
-      const tenantsData = await dataService.getTenants({ from: 0, to: 199 }, user?.role, user?.id);
-      setTenants(tenantsData);
-      setLoadingTenants(false);
-    } catch (error) {
-      console.error('Error loading tenants:', error);
-      setTenants([]);
-      setLoadingTenants(false);
-    }
-
-    // Phase 2: load heavier related data in the background
-    try {
-      const [contractsData, invoicesData, paymentsData] = await Promise.all([
-        dataService.getContracts(),
-        dataService.getInvoices(),
-        dataService.getPayments(),
-      ]);
-      setContracts(contractsData);
-      setInvoices(invoicesData);
-      setPayments(paymentsData);
-    } catch (error) {
-      console.error('Error loading related data:', error);
-      setContracts([]);
-      setInvoices([]);
-      setPayments([]);
-    }
+  const reloadTenants = () => {
+    queryClient.invalidateQueries({ queryKey: ['tenants'] });
   };
-
-  const loadTenants = async () => {
-    try {
-      const data = await dataService.getTenants({ from: 0, to: 199 }, user?.role, user?.id);
-      setTenants(data);
-    } catch (error) {
-      console.error('Error loading tenants:', error);
-      setTenants([]);
-    }
+  const reloadAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    queryClient.invalidateQueries({ queryKey: ['contracts'] });
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
   };
 
   // Note: searchTenants needs to be implemented in supabaseService or filter client-side
@@ -137,7 +122,7 @@ export default function Tenants() {
         }
       }
 
-      await loadTenants();
+      reloadTenants();
       setShowForm(false);
       setEditingTenant(null);
       setSelectedIdType('');
@@ -166,7 +151,7 @@ export default function Tenants() {
       try {
         const success = await dataService.deleteTenant(id, user?.role);
         if (success) {
-          await loadAllData();
+          reloadAll();
         } else {
           if (user?.role?.trim() !== 'admin') {
             alert('Only admins can delete tenants');

@@ -1,34 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { InvoiceWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, getStatusColor, cn } from '@/lib/utils';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, format, isSameMonth, isSameDay, isToday } from 'date-fns';
 
 export default function Calendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<InvoiceWithDetails[]>([]);
 
-  useEffect(() => {
-    loadInvoices();
-  }, [currentMonth]);
+  const calendarStart = startOfWeek(startOfMonth(currentMonth));
+  const calendarEnd = endOfWeek(endOfMonth(currentMonth));
+  const rangeKeyStart = calendarStart.toISOString().slice(0, 10);
+  const rangeKeyEnd = calendarEnd.toISOString().slice(0, 10);
 
-  const loadInvoices = async () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    const calendarStart = startOfWeek(monthStart);
-    const calendarEnd = endOfWeek(monthEnd);
-
-    try {
-      const data = await dataService.getInvoicesByDateRange(calendarStart, calendarEnd);
-      setInvoices(data);
-    } catch (error) {
-      console.error('Error loading invoices:', error);
-      setInvoices([]);
-    }
-  };
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoicesByDateRange(rangeKeyStart, rangeKeyEnd),
+    queryFn: () => dataService.getInvoicesByDateRange(calendarStart, calendarEnd),
+  });
+  const invoices: InvoiceWithDetails[] = invoicesQuery.data ?? [];
 
   const nextMonth = () => {
     setCurrentMonth(addMonths(currentMonth, 1));
@@ -196,7 +189,7 @@ export default function Calendar() {
                 <CalendarIcon className="w-6 h-6 text-primary-600 mr-3" />
                 <div>
                   <h3 className="font-semibold text-gray-900">
-                    {format(selectedDate, 'MMMM d, yyyy')}
+                    {format(selectedDate, 'd MMMM yyyy')}
                   </h3>
                   <p className="text-sm text-gray-600">
                     {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} due

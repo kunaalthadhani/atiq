@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Plus, Search, Building2, MapPin, Home, X, Edit2, Trash2, Upload, ChevronDown, Clock } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { Property, Unit } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Properties() {
   const { user } = useAuth();
-  const [properties, setProperties] = useState<Property[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null);
@@ -22,25 +24,21 @@ export default function Properties() {
   const unitFileInputRef = useRef<HTMLInputElement>(null);
   const [unitPropertyId, setUnitPropertyId] = useState<string | null>(null);
   const [isNewUnit, setIsNewUnit] = useState(false);
-  const [units, setUnits] = useState<Unit[]>([]);
 
-  useEffect(() => {
-    loadProperties();
-  }, [user]);
+  const propertiesQuery = useQuery({
+    queryKey: queryKeys.properties(user?.role, user?.id),
+    queryFn: () => dataService.getProperties(user?.role, user?.id),
+  });
+  const unitsQuery = useQuery({
+    queryKey: queryKeys.units(undefined, user?.role, user?.id),
+    queryFn: () => dataService.getUnits(undefined, user?.role, user?.id),
+  });
+  const properties: Property[] = propertiesQuery.data ?? [];
+  const units: Unit[] = unitsQuery.data ?? [];
 
-  const loadProperties = async () => {
-    try {
-      const [propertiesData, unitsData] = await Promise.all([
-        dataService.getProperties(user?.role, user?.id),
-        dataService.getUnits(undefined, user?.role, user?.id)
-      ]);
-      setProperties(propertiesData);
-      setUnits(unitsData);
-    } catch (error) {
-      console.error('Error loading properties:', error);
-      setProperties([]);
-      setUnits([]);
-    }
+  const reloadProperties = () => {
+    queryClient.invalidateQueries({ queryKey: ['properties'] });
+    queryClient.invalidateQueries({ queryKey: ['units'] });
   };
 
   // Client-side filtering (simpler than async search)
@@ -99,7 +97,7 @@ export default function Properties() {
         }
       }
 
-      await loadProperties();
+      reloadProperties();
       setShowForm(false);
       setEditingProperty(null);
       setUploadedImages([]);
@@ -122,7 +120,7 @@ export default function Properties() {
       try {
         const success = await dataService.deleteProperty(id, user?.role);
         if (success) {
-          await loadProperties();
+          reloadProperties();
         } else {
           if (user?.role?.trim() !== 'admin') {
             alert('Only admins can delete properties');
@@ -846,7 +844,7 @@ export default function Properties() {
                         });
                       }
 
-                      await loadProperties();
+                      reloadProperties();
                       closeUnitModal();
                     } catch (error) {
                       console.error('Error saving unit:', error);

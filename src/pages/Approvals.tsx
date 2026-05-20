@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
-import { FileText, DollarSign, AlertCircle, Users, Building2 } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, DollarSign, AlertCircle, Users, Building2, Trash2 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApprovalRequestWithDetails, ApprovalRequestType, InvoiceWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatDate, formatCurrency } from '@/lib/utils';
 
 export default function Approvals() {
   const { user } = useAuth();
-  const [requests, setRequests] = useState<ApprovalRequestWithDetails[]>([]);
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequestWithDetails | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -17,57 +19,34 @@ export default function Approvals() {
   // Check if user is admin (with trimming to handle whitespace issues)
   const isAdmin = user?.role?.trim() === 'admin';
 
+  const filterArg = filter === 'all' ? undefined : filter;
+  const requestsQuery = useQuery({
+    queryKey: queryKeys.approvalRequests(filterArg, undefined),
+    queryFn: () => dataService.getApprovalRequests(filterArg, undefined),
+    enabled: isAdmin,
+  });
+  const requests: ApprovalRequestWithDetails[] = requestsQuery.data ?? [];
+
+  const loadRequests = () => {
+    queryClient.invalidateQueries({ queryKey: ['approvalRequests'] });
+  };
+
   // Helper function to handle approval request data updates
   const handleApprovalRequestUpdate = async (updatedData: any) => {
     if (!selectedRequest) return;
-    
+
     // Update local state
     const updated = {
       ...selectedRequest,
       requestData: { ...selectedRequest.requestData, ...updatedData }
     };
     setSelectedRequest(updated);
-    
+
     // Update approval request in database
     try {
       await dataService.updateApprovalRequestData(selectedRequest.id, updatedData);
     } catch (error) {
       console.error('Error updating approval request data:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (isAdmin) {
-      loadRequests();
-    }
-  }, [user, filter, isAdmin]);
-
-
-  const loadRequests = async () => {
-    try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Approvals.tsx:loadRequests:entry',message:'Loading approval requests',data:{filter,userRole:user?.role,isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      console.log('=== APPROVALS PAGE: Loading requests ===');
-      console.log('Current filter:', filter);
-      console.log('User role:', user?.role);
-      
-      const data = await dataService.getApprovalRequests(
-        filter === 'all' ? undefined : filter,
-        undefined
-      );
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/4577611a-76d2-4bec-b115-9908c0ccfa71',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Approvals.tsx:loadRequests:result',message:'Approval requests loaded',data:{count:data.length,requests:data.map(r=>({id:r.id,requestType:r.requestType,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
-      console.log('Approvals page - received data:', data);
-      console.log('Number of requests:', data.length);
-      console.log('========================================');
-      
-      setRequests(data);
-    } catch (error) {
-      console.error('Error loading approval requests:', error);
     }
   };
 
@@ -77,7 +56,13 @@ export default function Approvals() {
     try {
       const result = await dataService.approveRequest(requestId, user.id);
       if (result.success) {
-        await loadRequests();
+        loadRequests();
+        queryClient.invalidateQueries({ queryKey: ['contracts'] });
+        queryClient.invalidateQueries({ queryKey: ['tenants'] });
+        queryClient.invalidateQueries({ queryKey: ['properties'] });
+        queryClient.invalidateQueries({ queryKey: ['units'] });
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        queryClient.invalidateQueries({ queryKey: ['payments'] });
         setSelectedRequest(null);
         alert('Request approved and processed successfully');
       } else {
@@ -86,6 +71,26 @@ export default function Approvals() {
     } catch (error) {
       console.error('Error approving request:', error);
       alert('Failed to approve request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (requestId: string, opts?: { closeModal?: boolean }) => {
+    if (!isAdmin) return;
+    if (!confirm('Delete this approval request permanently? This cannot be undone.')) return;
+    setLoading(true);
+    try {
+      const result = await dataService.deleteApprovalRequest(requestId, user?.role);
+      if (result.success) {
+        loadRequests();
+        if (opts?.closeModal) setSelectedRequest(null);
+      } else {
+        alert(result.message || 'Failed to delete request');
+      }
+    } catch (error) {
+      console.error('Error deleting approval request:', error);
+      alert('Failed to delete request');
     } finally {
       setLoading(false);
     }
@@ -247,6 +252,19 @@ export default function Approvals() {
                       Rejected
                     </span>
                   )}
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(request.id);
+                      }}
+                      disabled={loading}
+                      title="Delete this approval request"
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -378,32 +396,48 @@ export default function Approvals() {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setSelectedRequest(null);
-                    setRejectionReason('');
-                    setInvoiceDetails(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  disabled={loading}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleReject(selectedRequest.id)}
-                  disabled={loading || !rejectionReason.trim()}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => handleApprove(selectedRequest.id)}
-                  disabled={loading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Approve
-                </button>
+              <div className="flex justify-between items-center gap-3">
+                {isAdmin ? (
+                  <button
+                    onClick={() => handleDelete(selectedRequest.id, { closeModal: true })}
+                    disabled={loading}
+                    title="Permanently delete this request (use for orphaned/duplicate requests)"
+                    className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedRequest(null);
+                      setRejectionReason('');
+                      setInvoiceDetails(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleReject(selectedRequest.id)}
+                    disabled={loading || !rejectionReason.trim()}
+                    title={!rejectionReason.trim() ? 'Enter a rejection reason to enable' : ''}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => handleApprove(selectedRequest.id)}
+                    disabled={loading}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Approve
+                  </button>
+                </div>
               </div>
             </div>
           </div>

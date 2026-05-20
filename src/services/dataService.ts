@@ -608,6 +608,15 @@ class LocalStorageService {
     void _unused;
     return { success: false, message: 'Approval system requires Supabase' };
   }
+
+  async deleteApprovalRequest(
+    _requestId: string,
+    _userRole?: string
+  ): Promise<{ success: boolean; message?: string }> {
+    const _unused = { _requestId, _userRole };
+    void _unused;
+    return { success: false, message: 'Approval system requires Supabase' };
+  }
 }
 
 // Export the appropriate service

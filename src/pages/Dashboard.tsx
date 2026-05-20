@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2, Home, Users, FileText, TrendingUp,
@@ -9,28 +9,83 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import { useQuery } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { DashboardStats, InvoiceWithDetails, Property, Unit, ApprovalRequestWithDetails } from '@/types';
+import type { ContractWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [overdueInvoices, setOverdueInvoices] = useState<InvoiceWithDetails[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
   const [dateFilter, setDateFilter] = useState<'last_month' | 'last_3_months' | 'last_6_months' | 'past_year' | 'custom'>('last_month');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
-  
+
   const isAdmin = user?.role?.trim() === 'admin';
 
-  useEffect(() => {
-    loadData();
-  }, [isAdmin]);
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoices(),
+    queryFn: () => dataService.getInvoices() as Promise<InvoiceWithDetails[]>,
+  });
+  const propertiesQuery = useQuery({
+    queryKey: queryKeys.properties(user?.role, user?.id),
+    queryFn: () => dataService.getProperties(user?.role, user?.id) as Promise<Property[]>,
+  });
+  const unitsQuery = useQuery({
+    queryKey: queryKeys.units(undefined, user?.role, user?.id),
+    queryFn: () => dataService.getUnits(undefined, user?.role, user?.id) as Promise<Unit[]>,
+  });
+  const contractsQuery = useQuery({
+    queryKey: queryKeys.contracts(),
+    queryFn: () => dataService.getContracts() as Promise<ContractWithDetails[]>,
+  });
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvalRequests('pending', undefined),
+    queryFn: () => dataService.getApprovalRequests('pending', undefined),
+    enabled: isAdmin,
+  });
+
+  const invoices = invoicesQuery.data ?? [];
+  const properties = propertiesQuery.data ?? [];
+  const units = unitsQuery.data ?? [];
+  const contracts = contractsQuery.data ?? [];
+  const pendingApprovals: ApprovalRequestWithDetails[] = approvalsQuery.data ?? [];
+
+  const { overdueInvoices, stats } = useMemo(() => {
+    const now = new Date();
+    const overdue = invoices.filter(inv => {
+      const dueDate = new Date(inv.dueDate);
+      return inv.status !== 'paid' && inv.status !== 'cancelled' && dueDate < now;
+    });
+
+    const activeContracts = contracts.filter(c => c.status === 'active');
+    const activeTenants = new Set(activeContracts.map(c => c.tenantId)).size;
+    const occupiedUnits = units.filter(u => u.isOccupied).length;
+    const occupancyRate = units.length > 0 ? (occupiedUnits / units.length) * 100 : 0;
+
+    const computed: DashboardStats = {
+      totalProperties: properties.length,
+      totalUnits: units.length,
+      occupiedUnits,
+      vacantUnits: units.length - occupiedUnits,
+      totalTenants: 0,
+      activeTenants,
+      activeContracts: activeContracts.length,
+      totalRevenue: 0,
+      collectedRevenue: 0,
+      pendingRevenue: 0,
+      overdueRevenue: 0,
+      overdueInvoices: overdue.length,
+      upcomingInvoices: 0,
+      occupancyRate,
+      collectionRate: 0,
+    };
+    return { overdueInvoices: overdue, stats: computed };
+  }, [invoices, contracts, units, properties]);
+
+  const isLoading = invoicesQuery.isLoading || propertiesQuery.isLoading || unitsQuery.isLoading || contractsQuery.isLoading;
 
   // Calculate date range based on filter
   const getDateRange = () => {
@@ -74,36 +129,7 @@ export default function Dashboard() {
     return { startDate, endDate };
   };
 
-  const loadData = async () => {
-    try {
-      const dashboardStats = await dataService.getDashboardStats();
-      const overdue = await dataService.getOverdueInvoices();
-      const allInvoices = await dataService.getInvoices();
-      const allProperties = await dataService.getProperties();
-      const allUnits = await dataService.getUnits();
-      
-      setStats(dashboardStats);
-      setOverdueInvoices(overdue);
-      setInvoices(allInvoices);
-      setProperties(allProperties);
-      setUnits(allUnits);
-      
-      // Load pending approvals for admin users
-      if (isAdmin) {
-        try {
-          const approvals = await dataService.getApprovalRequests('pending', undefined);
-          setPendingApprovals(approvals);
-        } catch (error) {
-          console.error('Error loading pending approvals:', error);
-          setPendingApprovals([]);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    }
-  };
-
-  if (!stats) {
+  if (isLoading && invoices.length === 0) {
     return <div className="p-6">Loading...</div>;
   }
 
@@ -150,11 +176,11 @@ export default function Dashboard() {
   const paidCount = filteredInvoices.filter(i => i.status === 'paid').length;
   const overdueCount = filteredOverdueInvoices.length;
 
-  const currentDate = new Date().toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric', 
-    year: 'numeric' 
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
   });
 
   return (
@@ -220,7 +246,7 @@ export default function Dashboard() {
           )}
 
           <div className="text-xs text-gray-500 ml-auto">
-            Showing: {format(startDate, 'MMM d, yyyy')} - {format(endDate, 'MMM d, yyyy')}
+            Showing: {format(startDate, 'd MMM yyyy')} - {format(endDate, 'd MMM yyyy')}
           </div>
         </div>
       </div>

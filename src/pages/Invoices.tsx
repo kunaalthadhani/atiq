@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Receipt, Mail, MessageSquare, AlertCircle, CheckCircle, Clock, Share2, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { InvoiceWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, formatDate, getStatusColor, cn, generateWhatsAppLink, generateEmailLink } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Invoices() {
   const { user } = useAuth();
-  const [invoices, setInvoices] = useState<InvoiceWithDetails[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingInvoice, setEditingInvoice] = useState<InvoiceWithDetails | null>(null);
@@ -16,6 +18,17 @@ export default function Invoices() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [prefilledInvoice, setPrefilledInvoice] = useState<InvoiceWithDetails | null>(null);
+
+  const invoicesQuery = useQuery({
+    queryKey: queryKeys.invoices(),
+    queryFn: () => dataService.getInvoices(),
+  });
+  const invoices: InvoiceWithDetails[] = invoicesQuery.data ?? [];
+
+  const loadInvoices = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.invoices() });
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
+  };
 
   // Check URL params for filter status (for dashboard link)
   useEffect(() => {
@@ -30,20 +43,6 @@ export default function Invoices() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, filterStatus]);
-
-  useEffect(() => {
-    loadInvoices();
-  }, []);
-
-  const loadInvoices = async () => {
-    try {
-      const data = await dataService.getInvoices();
-      setInvoices(data);
-    } catch (error) {
-      console.error('Error loading invoices:', error);
-      setInvoices([]);
-    }
-  };
 
   // Sort invoices by creation date (newest first)
   const sortedInvoices = [...invoices].sort((a, b) => {

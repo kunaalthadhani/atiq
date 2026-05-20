@@ -345,52 +345,24 @@ class SupabaseService {
     
     // Non-admin users see approved properties and their own pending properties
     if (trimmedRole !== 'admin') {
-      // Fetch all properties first, then filter in memory
-      const allPropertiesResult = await supabase!
+      // Fetch approved properties via DB filter (avoid pulling everything)
+      const approvedPromise = supabase!
         .from('properties')
         .select('*')
+        .or('approval_status.is.null,approval_status.eq.approved')
         .order('created_at', { ascending: false });
-      
-      // Filter approved properties (null or 'approved' status)
-      const approvedResult = {
-        data: allPropertiesResult.data?.filter((p: any) => 
-          !p.approval_status || p.approval_status === 'approved'
-        ) || null,
-        error: allPropertiesResult.error
-      };
-      
-      // If there are pending properties, fetch them separately
-      let pendingResult: any = { data: null, error: null };
-      if (pendingPropertyIds.length > 0) {
-        pendingResult = await supabase!
-          .from('properties')
-          .select('*')
-          .eq('approval_status', 'pending')
-          .in('id', pendingPropertyIds)
-          .order('created_at', { ascending: false });
-      }
-      
-      // Debug logging
-      console.log('=== PROPERTIES FETCH DEBUG ===');
-      console.log('User ID:', userId);
-      console.log('User Role:', userRole);
-      console.log('Pending Property IDs:', pendingPropertyIds);
-      console.log('Approved properties:', approvedResult.data?.length || 0);
-      console.log('Pending properties:', pendingResult?.data?.length || 0);
-      if (approvedResult.data) {
-        approvedResult.data.forEach((p: any) => {
-          console.log(`Approved Property ${p.name}: approval_status=${p.approval_status}, id=${p.id}`);
-        });
-      }
-      if (pendingResult?.data) {
-        pendingResult.data.forEach((p: any) => {
-          console.log(`Pending Property ${p.name}: approval_status=${p.approval_status}, id=${p.id}`);
-        });
-      }
-      console.log('Approved Error:', approvedResult.error);
-      console.log('Pending Error:', pendingResult?.error);
-      console.log('=============================');
-      
+
+      const pendingPromise = pendingPropertyIds.length > 0
+        ? supabase!
+            .from('properties')
+            .select('*')
+            .eq('approval_status', 'pending')
+            .in('id', pendingPropertyIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: null, error: null } as any);
+
+      const [approvedResult, pendingResult] = await Promise.all([approvedPromise, pendingPromise]);
+
       if (approvedResult.error) {
         console.error('Error fetching approved properties:', approvedResult.error);
         return [];
@@ -2176,7 +2148,7 @@ class SupabaseService {
       }
     }
     
-    const { error } = await supabase!
+    const { data: updated, error } = await supabase!
       .from('approval_requests')
       .update({
         status: 'rejected',
@@ -2184,13 +2156,46 @@ class SupabaseService {
         rejection_reason: reason,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', requestId);
-    
+      .eq('id', requestId)
+      .select('id, status')
+      .maybeSingle();
+
     if (error) {
       console.error('Error rejecting request:', error);
       return { success: false, message: error.message };
     }
-    
+    if (!updated) {
+      console.error('Rejection had no effect — row not updated (likely RLS or missing row).');
+      return { success: false, message: 'Rejection had no effect. You may not have permission to reject this request, or it was already processed.' };
+    }
+
+    return { success: true };
+  }
+
+  async deleteApprovalRequest(
+    requestId: string,
+    userRole?: string
+  ): Promise<{ success: boolean; message?: string }> {
+    if (!this.checkSupabase()) throw new Error('Supabase is not configured');
+    if (userRole?.trim() !== 'admin') {
+      return { success: false, message: 'Only admins can delete approval requests' };
+    }
+
+    const { data: deleted, error } = await supabase!
+      .from('approval_requests')
+      .delete()
+      .eq('id', requestId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error deleting approval request:', error);
+      return { success: false, message: error.message };
+    }
+    if (!deleted) {
+      return { success: false, message: 'Delete had no effect. Check RLS policy on approval_requests or that the request still exists.' };
+    }
+
     return { success: true };
   }
 

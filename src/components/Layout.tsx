@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, Building2, Users, FileText, 
+import {
+  LayoutDashboard, Building2, Users, FileText,
   Receipt, Wallet, Calendar, X, Bell, LogOut, CheckCircle, Key
 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { Reminder, ApprovalRequestWithDetails } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { cn, formatDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import SupabaseWarning from './SupabaseWarning';
@@ -25,58 +27,36 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequestWithDetails[]>([]);
+  const queryClient = useQueryClient();
   const [dismissedApprovalIds, setDismissedApprovalIds] = useState<Set<string>>(new Set());
-  
+
   const isAdmin = user?.role?.trim() === 'admin';
 
-  useEffect(() => {
-    loadReminders();
-    if (isAdmin) {
-      loadPendingApprovals();
-    }
-    const interval = setInterval(() => {
-      loadReminders();
-      if (isAdmin) {
-        loadPendingApprovals();
-      }
-    }, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [isAdmin]);
+  const remindersQuery = useQuery({
+    queryKey: queryKeys.reminders(),
+    queryFn: async () => {
+      const getActive = (dataService as any).getActiveReminders;
+      if (typeof getActive !== 'function') return [] as Reminder[];
+      const result = getActive.call(dataService);
+      return (result instanceof Promise ? await result : result) as Reminder[];
+    },
+    refetchInterval: 60_000,
+  });
 
-  const loadReminders = async () => {
-    try {
-      // Handle both async (Supabase) and sync (localStorage) versions
-      if (typeof (dataService as any).getActiveReminders === 'function') {
-        const result = (dataService as any).getActiveReminders();
-        if (result instanceof Promise) {
-          const activeReminders = await result;
-          setReminders(activeReminders);
-        } else {
-          setReminders(result);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading reminders:', error);
-      setReminders([]);
-    }
-  };
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvalRequests('pending', undefined),
+    queryFn: () => dataService.getApprovalRequests('pending', undefined),
+    enabled: isAdmin,
+    refetchInterval: 60_000,
+  });
 
-  const loadPendingApprovals = async () => {
-    try {
-      const approvals = await dataService.getApprovalRequests('pending', undefined);
-      setPendingApprovals(approvals);
-    } catch (error) {
-      console.error('Error loading pending approvals:', error);
-      setPendingApprovals([]);
-    }
-  };
+  const reminders: Reminder[] = remindersQuery.data ?? [];
+  const pendingApprovals: ApprovalRequestWithDetails[] = approvalsQuery.data ?? [];
 
   const dismissReminder = async (id: string) => {
     try {
       await dataService.dismissReminder(id);
-      loadReminders();
+      queryClient.invalidateQueries({ queryKey: queryKeys.reminders() });
     } catch (error) {
       console.error('Error dismissing reminder:', error);
     }
@@ -118,17 +98,6 @@ export default function Layout() {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
-              // Debug: Log user role
-              if (item.adminOnly) {
-                console.log('Checking Approvals access:', {
-                  user: user,
-                  role: user?.role,
-                  isAdmin: user?.role === 'admin',
-                  roleType: typeof user?.role,
-                  roleValue: JSON.stringify(user?.role)
-                });
-              }
-              
               // Hide admin-only items for non-admin users (trim role to handle whitespace)
               if (item.adminOnly && user?.role?.trim() !== 'admin') {
                 return null;

@@ -1,35 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Search, Home, X, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataService } from '@/services/dataService';
 import { Unit, Property } from '@/types';
+import { queryKeys } from '@/lib/queryClient';
 import { formatCurrency, cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Units() {
   const { user } = useAuth();
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [filterProperty, setFilterProperty] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  useEffect(() => {
-    loadData();
-  }, [user]);
+  const unitsQuery = useQuery({
+    queryKey: queryKeys.units(undefined, user?.role, user?.id),
+    queryFn: () => dataService.getUnits(undefined, user?.role, user?.id),
+  });
+  const propertiesQuery = useQuery({
+    queryKey: queryKeys.properties(user?.role, user?.id),
+    queryFn: () => dataService.getProperties(user?.role, user?.id),
+  });
+  const units: Unit[] = unitsQuery.data ?? [];
+  const properties: Property[] = propertiesQuery.data ?? [];
 
-  const loadData = async () => {
-    try {
-      const unitsData = await dataService.getUnits(undefined, user?.role, user?.id);
-      const propertiesData = await dataService.getProperties(user?.role, user?.id);
-      setUnits(unitsData);
-      setProperties(propertiesData);
-    } catch (error) {
-      console.error('Error loading units data:', error);
-      setUnits([]);
-      setProperties([]);
-    }
+  const reloadData = () => {
+    queryClient.invalidateQueries({ queryKey: ['units'] });
+    queryClient.invalidateQueries({ queryKey: ['properties'] });
   };
 
   const filteredUnits = units.filter(unit => {
@@ -88,7 +88,7 @@ export default function Units() {
         // #endregion
       }
 
-      await loadData();
+      reloadData();
       setShowForm(false);
       setEditingUnit(null);
     } catch (error) {
@@ -107,7 +107,7 @@ export default function Units() {
       try {
         const success = await dataService.deleteUnit(id, user?.role);
         if (success) {
-          await loadData();
+          reloadData();
         } else {
           if (user?.role?.trim() !== 'admin') {
             alert('Only admins can delete units');
