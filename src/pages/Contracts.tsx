@@ -30,6 +30,7 @@ export default function Contracts() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [error, setError] = useState<string>('');
   const [viewingContract, setViewingContract] = useState<ContractWithDetails | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
@@ -86,7 +87,12 @@ export default function Contracts() {
   const pendingContractApprovals: ApprovalRequestWithDetails[] = (pendingApprovalsQuery.data ?? []).filter(
     req => req.requestType === 'contract_create' && req.status === 'pending'
   );
-  const error = contractsQuery.error ? 'Failed to load contracts. Please refresh the page.' : '';
+
+  useEffect(() => {
+    if (contractsQuery.error) {
+      setError('Failed to load contracts. Please refresh the page.');
+    }
+  }, [contractsQuery.error]);
 
   const loadData = () => {
     queryClient.invalidateQueries({ queryKey: ['contracts'] });
