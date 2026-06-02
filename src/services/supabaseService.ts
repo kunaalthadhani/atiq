@@ -499,23 +499,29 @@ class SupabaseService {
 
   async deleteProperty(id: string, userRole?: string): Promise<boolean> {
     if (!this.checkSupabase()) return false;
-    
+
     // Only admins can delete properties
     if (userRole?.trim() !== 'admin') {
       console.error('Only admins can delete properties');
       return false;
     }
-    
-    const { error } = await supabase!
+
+    const { data: deleted, error } = await supabase!
       .from('properties')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+
     if (error) {
       console.error('Error deleting property:', error);
       return false;
     }
-    
+    if (!deleted) {
+      console.error('Property delete had no effect — likely RLS policy is missing or denying the delete.');
+      return false;
+    }
+
     return true;
   }
 
@@ -624,16 +630,22 @@ class SupabaseService {
       return false;
     }
     
-    const { error } = await supabase!
+    const { data: deleted, error } = await supabase!
       .from('units')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+
     if (error) {
       console.error('Error deleting unit:', error);
       return false;
     }
-    
+    if (!deleted) {
+      console.error('Unit delete had no effect — likely RLS policy is missing or denying the delete.');
+      return false;
+    }
+
     return true;
   }
 
@@ -911,16 +923,22 @@ class SupabaseService {
       return false; // Cannot delete tenant with contracts
     }
     
-    const { error } = await supabase!
+    const { data: deleted, error } = await supabase!
       .from('tenants')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+
     if (error) {
       console.error('Error deleting tenant:', error);
       return false;
     }
-    
+    if (!deleted) {
+      console.error('Tenant delete had no effect — likely RLS policy is missing or denying the delete.');
+      return false;
+    }
+
     return true;
   }
 
@@ -1122,9 +1140,18 @@ class SupabaseService {
       console.error('Only draft contracts can be deleted');
       return false;
     }
-    const { error } = await supabase!.from('contracts').delete().eq('id', id);
+    const { data: deleted, error } = await supabase!
+      .from('contracts')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
     if (error) {
       console.error('Error deleting contract:', error);
+      return false;
+    }
+    if (!deleted) {
+      console.error('Contract delete had no effect — likely RLS policy is missing or denying the delete.');
       return false;
     }
     return true;
