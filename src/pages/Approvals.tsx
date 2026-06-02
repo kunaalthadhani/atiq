@@ -942,6 +942,8 @@ function ContractApprovalEditor({
                editedData.paymentFrequency === '2_payment' ? '2 Payments' :
                editedData.paymentFrequency === '3_payment' ? '3 Payments' :
                editedData.paymentFrequency === '4_payment' ? '4 Payments' :
+               editedData.paymentFrequency === '6_payment' ? '6 Payments' :
+               editedData.paymentFrequency === '12_payment' ? '12 Payments' :
                editedData.paymentFrequency}
             </p>
           </div>
@@ -1029,6 +1031,8 @@ function ContractApprovalEditor({
             <option value="2_payment">2 Payments</option>
             <option value="3_payment">3 Payments</option>
             <option value="4_payment">4 Payments</option>
+            <option value="6_payment">6 Payments</option>
+            <option value="12_payment">12 Payments</option>
           </select>
         </div>
         <div>

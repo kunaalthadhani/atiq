@@ -238,9 +238,9 @@ const toContractRow = (contract: Omit<Contract, 'id' | 'createdAt'>) => {
 // Normalize contract data from JSONB (converts string dates to Date objects)
 function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt'> {
   // Validate payment frequency
-  const validPaymentFrequencies = ['1_payment', '2_payment', '3_payment', '4_payment'];
-  const paymentFrequency = validPaymentFrequencies.includes(data.paymentFrequency) 
-    ? data.paymentFrequency 
+  const validPaymentFrequencies = ['1_payment', '2_payment', '3_payment', '4_payment', '6_payment', '12_payment'];
+  const paymentFrequency = validPaymentFrequencies.includes(data.paymentFrequency)
+    ? data.paymentFrequency
     : '4_payment'; // Default to 4_payment if invalid
   
   return {
@@ -255,7 +255,7 @@ function normalizeContractFromJSONB(data: any): Omit<Contract, 'id' | 'createdAt
       : new Date(data.endDate),
     monthlyRent: data.monthlyRent,
     securityDeposit: data.securityDeposit,
-    paymentFrequency: paymentFrequency as '1_payment' | '2_payment' | '3_payment' | '4_payment',
+    paymentFrequency: paymentFrequency as '1_payment' | '2_payment' | '3_payment' | '4_payment' | '6_payment' | '12_payment',
     numberOfInstallments: data.numberOfInstallments,
     status: data.status,
     reminderPeriod: data.reminderPeriod,
@@ -1273,8 +1273,14 @@ class SupabaseService {
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3;
       amountPerInstallment = Math.round(totalContractValue / 4);
+    } else if (contract.paymentFrequency === '6_payment') {
+      intervalMonths = 2;
+      amountPerInstallment = Math.round(totalContractValue / 6);
+    } else if (contract.paymentFrequency === '12_payment') {
+      intervalMonths = 1;
+      amountPerInstallment = Math.round(totalContractValue / 12);
     }
-    
+
     const { data: invoices, error: fetchErr } = await supabase!
       .from('invoices')
       .select('id, installment_number, paid_amount, amount')
@@ -1324,6 +1330,8 @@ class SupabaseService {
     // 2 Payments = semi-annually (6 months each)
     // 3 Payments = every 4 months
     // 4 Payments = quarterly (3 months each)
+    // 6 Payments = every 2 months
+    // 12 Payments = monthly
     if (contract.paymentFrequency === '1_payment') {
       intervalMonths = 12; // Annually
       amountPerInstallment = Math.round(totalContractValue);
@@ -1336,6 +1344,12 @@ class SupabaseService {
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3; // Quarterly
       amountPerInstallment = Math.round(totalContractValue / 4);
+    } else if (contract.paymentFrequency === '6_payment') {
+      intervalMonths = 2; // Every 2 months
+      amountPerInstallment = Math.round(totalContractValue / 6);
+    } else if (contract.paymentFrequency === '12_payment') {
+      intervalMonths = 1; // Monthly
+      amountPerInstallment = Math.round(totalContractValue / 12);
     }
 
     const invoices = [];

@@ -60,7 +60,7 @@ export interface Tenant {
 }
 
 export type ContractStatus = 'active' | 'expired' | 'terminated' | 'draft';
-export type PaymentFrequency = '1_payment' | '2_payment' | '3_payment' | '4_payment';
+export type PaymentFrequency = '1_payment' | '2_payment' | '3_payment' | '4_payment' | '6_payment' | '12_payment';
 export type ReminderPeriod = '3_days' | '1_week' | '2_weeks' | '1_month';
 
 export interface Contract {

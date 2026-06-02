@@ -326,6 +326,12 @@ class LocalStorageService {
     } else if (contract.paymentFrequency === '4_payment') {
       intervalMonths = 3;
       amountPerInstallment = Math.round(totalContractValue / 4);
+    } else if (contract.paymentFrequency === '6_payment') {
+      intervalMonths = 2;
+      amountPerInstallment = Math.round(totalContractValue / 6);
+    } else if (contract.paymentFrequency === '12_payment') {
+      intervalMonths = 1;
+      amountPerInstallment = Math.round(totalContractValue / 12);
     }
     const invoices = this.loadFromStorage<Invoice>('invoices');
     const contractInvoices = invoices.filter(inv => inv.contractId === contract.id).sort((a, b) => a.installmentNumber - b.installmentNumber);

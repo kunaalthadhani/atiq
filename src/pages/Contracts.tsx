@@ -19,6 +19,10 @@ const formatPaymentFrequency = (frequency: string): string => {
       return '3 Payments';
     case '4_payment':
       return '4 Payments';
+    case '6_payment':
+      return '6 Payments';
+    case '12_payment':
+      return '12 Payments';
     default:
       return frequency;
   }
@@ -175,6 +179,10 @@ export default function Contracts() {
         newInstallments = 3;
       } else if (formFrequency === '4_payment') {
         newInstallments = 4;
+      } else if (formFrequency === '6_payment') {
+        newInstallments = 6;
+      } else if (formFrequency === '12_payment') {
+        newInstallments = 12;
       }
     }
     setCalculatedInstallments(newInstallments);
@@ -930,6 +938,8 @@ export default function Contracts() {
                     <option value="2_payment">2 Payments</option>
                     <option value="3_payment">3 Payments</option>
                     <option value="4_payment">4 Payments</option>
+                    <option value="6_payment">6 Payments</option>
+                    <option value="12_payment">12 Payments</option>
                   </select>
                 </div>
 
