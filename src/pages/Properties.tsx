@@ -438,11 +438,33 @@ export default function Properties() {
                                 </button>
                                 <button
                                   type="button"
-                                  className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Delete unit"
-                                  onClick={() =>
-                                    alert('Delete this unit from the Units page for now.')
-                                  }
+                                  className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={unit.isOccupied ? 'Cannot delete an occupied unit' : 'Delete unit'}
+                                  disabled={unit.isOccupied}
+                                  onClick={async () => {
+                                    if (user?.role?.trim() !== 'admin') {
+                                      alert('Only admins can delete units');
+                                      return;
+                                    }
+                                    if (unit.isOccupied) {
+                                      alert('Cannot delete an occupied unit. Terminate the contract first.');
+                                      return;
+                                    }
+                                    if (!confirm(`Delete unit "${unit.unitNumber}"? This cannot be undone.`)) {
+                                      return;
+                                    }
+                                    try {
+                                      const success = await dataService.deleteUnit(unit.id, user?.role);
+                                      if (success) {
+                                        reloadProperties();
+                                      } else {
+                                        alert('Failed to delete unit. It may have past contracts or RLS may be blocking the action.');
+                                      }
+                                    } catch (error) {
+                                      console.error('Error deleting unit:', error);
+                                      alert('Failed to delete unit.');
+                                    }
+                                  }}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
