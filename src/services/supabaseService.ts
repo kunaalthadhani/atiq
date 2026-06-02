@@ -956,7 +956,7 @@ class SupabaseService {
           payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date, billing_address
         ),
         unit:units(
-          id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+          id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, notes, created_at,
           property:properties(
             id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
           )
@@ -964,7 +964,7 @@ class SupabaseService {
       `)
       .order('created_at', { ascending: false })
       .range(range.from, range.to);
-    
+
     if (error) {
       console.error('Error fetching contracts:', error);
       return [];
@@ -1406,7 +1406,7 @@ class SupabaseService {
             payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
           ),
           unit:units(
-            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, notes, created_at,
             property:properties(
               id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
             )
@@ -1476,7 +1476,7 @@ class SupabaseService {
             payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
           ),
           unit:units(
-            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, images, notes, created_at,
+            id, property_id, unit_number, type, floor, bedrooms, bathrooms, square_feet, monthly_rent, is_occupied, notes, created_at,
             property:properties(
               id, name, address, address_line_2, city, country, state, postal_code, short_code, notes, is_active, created_at
             )
