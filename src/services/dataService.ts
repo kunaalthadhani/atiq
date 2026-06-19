@@ -227,6 +227,11 @@ class LocalStorageService {
     return { success: true, contract: newContract };
   }
 
+  async getContractById(id: string): Promise<Contract | null> {
+    const contracts = this.loadFromStorage<Contract>('contracts');
+    return contracts.find(c => c.id === id) || null;
+  }
+
   async terminateContract(
     id: string,
     _userId?: string,

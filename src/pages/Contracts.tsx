@@ -107,6 +107,18 @@ export default function Contracts() {
     queryClient.invalidateQueries({ queryKey: ['approvalRequests'] });
   };
 
+  // Lazy-load attachments for a contract (the list query omits attachments to save egress).
+  // Shows the modal immediately with cached data, then refreshes with full data when fetched.
+  const openContractView = async (contract: ContractWithDetails) => {
+    setViewingContract(contract);
+    setContractAttachments(contract.attachments || []);
+    const full = await dataService.getContractById(contract.id);
+    if (full) {
+      setViewingContract({ ...contract, attachments: full.attachments || [] });
+      setContractAttachments(full.attachments || []);
+    }
+  };
+
   // Reset to first page when search or filter changes
   useEffect(() => {
     setCurrentPage(1);
@@ -197,7 +209,7 @@ export default function Contracts() {
     }
   }, [formStartDate, formEndDate, formFrequency]);
 
-  const openEditForm = (contract: ContractWithDetails) => {
+  const openEditForm = async (contract: ContractWithDetails) => {
     setSelectedTenantId(contract.tenantId);
     setTenantSearch(`${contract.tenant.firstName} ${contract.tenant.lastName}`);
     setSelectedPropertyId(contract.unit.propertyId);
@@ -216,6 +228,11 @@ export default function Contracts() {
     }
     setEditingContract(contract);
     setShowForm(true);
+    // Lazy-load attachments (omitted from list query for egress)
+    const full = await dataService.getContractById(contract.id);
+    if (full) {
+      setContractAttachments(full.attachments || []);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -654,10 +671,7 @@ export default function Contracts() {
                 {/* Actions */}
                 <div className="flex gap-2 ml-4 flex-shrink-0">
                   <button
-                    onClick={() => {
-                      setViewingContract(contract);
-                      setContractAttachments(contract.attachments || []);
-                    }}
+                    onClick={() => openContractView(contract)}
                     className="px-3 py-1.5 border border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors text-xs font-medium"
                   >
                     View
@@ -1476,12 +1490,10 @@ export default function Contracts() {
                   onClick={async () => {
                     try {
                       await dataService.updateContract(attachmentContractId, { attachments: contractAttachments }, user?.id, user?.role);
-                      await loadData();
-                      // Reload the contract to get updated data
-                      const updatedContracts = await dataService.getContracts();
-                      const updatedContract = updatedContracts.find(c => c.id === attachmentContractId);
-                      if (updatedContract) {
-                        setViewingContract(updatedContract);
+                      loadData();
+                      // Merge the saved attachments into the open view (avoids a second heavy fetch)
+                      if (viewingContract && viewingContract.id === attachmentContractId) {
+                        setViewingContract({ ...viewingContract, attachments: contractAttachments });
                       }
                       setShowAttachmentsModal(false);
                       setAttachmentContractId(null);

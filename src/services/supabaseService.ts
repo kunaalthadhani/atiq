@@ -950,7 +950,9 @@ class SupabaseService {
     const { data, error } = await supabase!
       .from('contracts')
       .select(`
-        *,
+        id, tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit,
+        payment_frequency, number_of_installments, status, reminder_period, notes, created_at,
+        contract_number, due_date_day, payment_amounts,
         tenant:tenants(
           id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
           payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date, billing_address
@@ -985,6 +987,26 @@ class SupabaseService {
         } as ContractWithDetails;
       })
       .filter((c: ContractWithDetails) => c.tenant && c.unit && c.property);
+  }
+
+  /**
+   * Fetch a single contract including its (potentially heavy) attachments column.
+   * Use this when opening a detail/edit view that needs the attachments;
+   * getContracts() omits attachments for egress reasons.
+   */
+  async getContractById(id: string): Promise<Contract | null> {
+    if (!this.checkSupabase()) return null;
+    const { data, error } = await supabase!
+      .from('contracts')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching contract by id:', error);
+      return null;
+    }
+    return mapContract(data);
   }
 
   async createContract(
@@ -1400,7 +1422,9 @@ class SupabaseService {
       .select(`
         *,
         contract:contracts!inner(
-          *,
+          id, tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit,
+          payment_frequency, number_of_installments, status, reminder_period, notes, created_at,
+          contract_number, due_date_day, payment_amounts,
           tenant:tenants(
             id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
             payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
@@ -1470,7 +1494,9 @@ class SupabaseService {
       .select(`
         *,
         contract:contracts!inner(
-          *,
+          id, tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit,
+          payment_frequency, number_of_installments, status, reminder_period, notes, created_at,
+          contract_number, due_date_day, payment_amounts,
           tenant:tenants(
             id, first_name, last_name, email, phone, secondary_phone, whatsapp_number, secondary_whatsapp_number,
             payment_method, notification_preference, national_id, id_type, id_number, id_expiry_date
